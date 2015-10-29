@@ -111,7 +111,7 @@ public class QueryParser {
 
             } else {
 
-                if (token.getValue().matches(REGEX_NUMERAL) || token.isLiteral()) {
+                if (token.getValue().matches(REGEX_NUMERAL) || token.isLiteral() || token.getValue().equalsIgnoreCase("null")) {
                     values.add(token);
                     expectComma = true;
                 } else {
@@ -150,7 +150,17 @@ public class QueryParser {
         }
 
         // new value for field indicated earlier
+        //TODO COMPUTE_VALUE
         String value = parseData.next();
+
+        // force WHERE keyword
+        lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase("where")) {
+            throwParseError("Expected keyword WHERE before %s", lookAhead);
+        }
+
+        // TODO TUPLE_CONDITION
+        String condition = parseData.next();
 
     }
 
@@ -193,7 +203,6 @@ public class QueryParser {
         }
 
         parseData.addCommand(new CoSQLCreateDatabase(name));
-        //end(parseData);
     }
 
     private void createTable(ParseData parseData) throws CoSQLQueryParseError, CoSQLQueryExecutionError {
@@ -227,8 +236,6 @@ public class QueryParser {
 
         CoSQLCommand command = new CoSQLCreateTable(name, columns);
         parseData.addCommand(command);
-
-        //end(parseData);
     }
 
     private Table.Column tableColumn(ParseData parseData) throws CoSQLQueryParseError {

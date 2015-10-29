@@ -77,8 +77,8 @@ public class DatabaseCore {
 
             } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) {
 
-                // expecting literal value
-                if (!values.get(i).isLiteral()) {
+                // expecting literal value or null
+                if (!values.get(i).isLiteral() && !values.get(i).getValue().equalsIgnoreCase("null")) {
                     throwExecError("Insert argument at index %d should be string literal (%s given)",
                         i, values.get(i).getValue()
                     );
@@ -106,8 +106,12 @@ public class DatabaseCore {
 
             } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
-                // add directly
-                dataValueSet.add(values.get(i).getValue());
+                if (!values.get(i).getValue().equalsIgnoreCase("null")) {
+                    // add directly
+                    dataValueSet.add(null);
+                } else {
+                    dataValueSet.add(values.get(i).getValue());
+                }
 
             }
 
