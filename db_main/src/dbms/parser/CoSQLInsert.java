@@ -2,6 +2,7 @@ package dbms.parser;
 
 import java.util.ArrayList;
 
+import dbms.engine.DatabaseCore;
 import dbms.exceptions.CoSQLQueryExecutionError;
 
 /**
@@ -19,6 +20,6 @@ public class CoSQLInsert extends CoSQLCommand {
 
     @Override
     public void execute() throws CoSQLQueryExecutionError {
-        // TODO fill
+        DatabaseCore.insert(table, values);
     }
 }

@@ -20,7 +20,7 @@ public class Database implements Serializable {
 
     public Database(String name) {
         this.name = name;
-        this.tables = new HashMap<String, Table>();
+        this.tables = new HashMap<>();
     }
 
     public void addTable(Table table) {

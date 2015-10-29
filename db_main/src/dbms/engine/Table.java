@@ -1,19 +1,17 @@
 package dbms.engine;
 
+import dbms.exceptions.CoSQLQueryParseError;
+
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.List;
-
-import dbms.exceptions.CoSQLQueryExecutionError;
-import dbms.exceptions.CoSQLQueryParseError;
 
 /**
  * Created by blackvvine on 10/25/15.
  */
 public class Table implements Serializable {
 
-    public static enum ColumnType {
-        INT, TEXT
+    public enum ColumnType {
+        INT, VARCHAR
     }
 
     public static class Column {
@@ -28,7 +26,7 @@ public class Table implements Serializable {
             if (typeStr.equalsIgnoreCase("int")) {
                 type = Table.ColumnType.INT;
             } else if (typeStr.equalsIgnoreCase("varchar")) {
-                type = Table.ColumnType.TEXT;
+                type = Table.ColumnType.VARCHAR;
             } else {
                 String error = String.format("Unknown column type: %s", typeStr);
                 throw new CoSQLQueryParseError(error);
@@ -57,8 +55,8 @@ public class Table implements Serializable {
     /* default constructor */
     public Table(String name) {
         this.tableName = name;
-        this.columns = new ArrayList<Column>();
-        this.contents = new ArrayList<Row>();
+        this.columns = new ArrayList<>();
+        this.contents = new ArrayList<>();
     }
 
     public int getColumnCount() {

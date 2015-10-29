@@ -1,18 +1,13 @@
 package dbms.engine;
 
-import java.lang.reflect.InvocationTargetException;
+import dbms.exceptions.CoSQLQueryExecutionError;
+import dbms.parser.LexicalToken;
+import dbms.parser.QueryParser;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import dbms.exceptions.CoSQLError;
-import dbms.exceptions.CoSQLQueryExecutionError;
-import dbms.exceptions.CoSQLQueryParseError;
-import dbms.parser.CoSQLInsert;
-import dbms.parser.LexicalToken;
-import dbms.parser.QueryParser;
-
-import static dbms.DatabaseBible.JUDGE_MODE;
 import static dbms.util.LanguageUtils.throwExecError;
 
 public class DatabaseCore {
@@ -28,7 +23,7 @@ public class DatabaseCore {
         defaultDatabase = new Database("DEFAULT");
 
         // create database list (as hash map, RBT really)
-        databases = new HashMap<String, Database>();
+        databases = new HashMap<>();
 
         // add default database to DB list
         databases.put(defaultDatabase.name, defaultDatabase);
@@ -50,7 +45,7 @@ public class DatabaseCore {
 
         databases.put(name, new Database(name));
 
-        System.out.println("CREATE DATABASE OK");
+        System.out.println("DATABASE CREATED");
     }
 
     // TODO @Urgent null support
@@ -80,7 +75,7 @@ public class DatabaseCore {
                     );
                 }
 
-            } else if (target.getColumnAt(i).type == Table.ColumnType.TEXT) {
+            } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) {
 
                 // expecting literal value
                 if (!values.get(i).isLiteral()) {
@@ -99,7 +94,7 @@ public class DatabaseCore {
 
         // construct value set and parse data (convert to appropriate type)
 
-        ArrayList<Object> dataValueSet = new ArrayList<Object>();
+        ArrayList<Object> dataValueSet = new ArrayList<>();
 
         for (int i=0; i<target.getColumnCount(); i++) {
 
@@ -109,7 +104,7 @@ public class DatabaseCore {
                 long parsed = Long.parseLong(values.get(i).getValue());
                 dataValueSet.add(parsed);
 
-            } else if (target.getColumnAt(i).type == Table.ColumnType.TEXT) { // if varchar
+            } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
                 // add directly
                 dataValueSet.add(values.get(i).getValue());
@@ -120,7 +115,7 @@ public class DatabaseCore {
 
         // finally, insert the parsed
         target.insertRow(dataValueSet);
-
+        System.out.println("RECORD INSERTED");
     }
 
     public static void createTable(String name, List<Table.Column> columns) throws CoSQLQueryExecutionError {
@@ -152,7 +147,7 @@ public class DatabaseCore {
         currentDatabase.addTable(newTable);
 
         // user feedback
-        String message = String.format("CREATE TABLE \'%s\' OK", name);
+        String message = "TABLE CREATED";
         System.out.println(message);
     }
 
