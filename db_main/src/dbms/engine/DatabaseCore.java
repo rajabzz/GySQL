@@ -1,5 +1,6 @@
 package dbms.engine;
 
+import com.sun.rowset.internal.Row;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
@@ -106,7 +107,7 @@ public class DatabaseCore {
 
             } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
-                if (!values.get(i).getValue().equalsIgnoreCase("null")) {
+                if (values.get(i).getValue().equalsIgnoreCase("null")) {
                     // add directly
                     dataValueSet.add(null);
                 } else {
@@ -155,4 +156,14 @@ public class DatabaseCore {
         System.out.println(message);
     }
 
+    public static void printTable(String tableName) throws CoSQLQueryExecutionError {
+        Table table = defaultDatabase.getTable(tableName);
+
+        // if table doesn't exist
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        System.out.println(table);
+    }
 }

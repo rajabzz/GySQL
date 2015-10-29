@@ -1,5 +1,6 @@
 package dbms.engine;
 
+import com.sun.rowset.internal.Row;
 import dbms.exceptions.CoSQLQueryParseError;
 
 import java.io.Serializable;
@@ -75,6 +76,10 @@ public class Table implements Serializable {
         this.contents.add(new Row(args));
     }
 
+    public ArrayList<Row> getContents() {
+        return contents;
+    }
+
     public void addColumn(String name, ColumnType type) {
         columns.add(new Column(name, type));
     }
@@ -83,12 +88,40 @@ public class Table implements Serializable {
         columns.add(c);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < columns.size(); i++) {
+            result.append(columns.get(i).name);
+            if (i != columns.size() - 1) {
+                result.append(",");
+            }
+        }
+        for (Row row: contents) {
+            result.append("\n").append(row);
+        }
+        return result.toString();
+    }
+
     private class Row implements Serializable {
 
         ArrayList<Object> values;
 
         public Row(ArrayList<Object> values) {
             this.values = values;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < values.size(); i++) {
+                result.append(values.get(i));
+                if (i != values.size() - 1) {
+                    result.append(",");
+                }
+            }
+
+            return result.toString();
         }
     }
 

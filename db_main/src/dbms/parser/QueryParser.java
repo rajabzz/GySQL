@@ -54,8 +54,13 @@ public class QueryParser {
             create(parseData);
         } else if (next.equalsIgnoreCase("insert")) {
             insert(parseData);
+        } else if (next.equalsIgnoreCase("update")){
+            update(parseData);
+        } else if (next.equalsIgnoreCase("print")) { // for debugging only
+            print(parseData);
         } else {
             // TODO error
+            System.err.println("Invalid command!");
         }
 
         end(parseData);
@@ -162,6 +167,15 @@ public class QueryParser {
         // TODO TUPLE_CONDITION
         String condition = parseData.next();
 
+    }
+
+    // this method is for debugging only ..
+    private void print(ParseData parseData) throws CoSQLQueryParseError {
+        // get tableName
+        String tableName = tableName(parseData);
+
+        CoSQLPrintTable printTableQuery = new CoSQLPrintTable(tableName);
+        parseData.addCommand(printTableQuery);
     }
 
     private String tableName(ParseData parseData) throws CoSQLQueryParseError {
