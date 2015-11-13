@@ -43,7 +43,11 @@ public class Table implements Serializable {
             this.name = name;
             this.type = type;
         }
-    };
+
+        public String getName() {return name;}
+
+        public ColumnType getType() {return type;}
+    }
 
     /* name of the table */
     String tableName;
@@ -102,6 +106,8 @@ public class Table implements Serializable {
     public void insertRow(ArrayList args) {
         this.contents.add(new Row(args));
     }
+
+    public Row getRowAt(int i) {return contents.get(i);}
 
     public void removeRow(Row row) {this.contents.remove(row);}
 
