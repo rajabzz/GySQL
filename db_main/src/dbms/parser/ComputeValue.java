@@ -17,7 +17,7 @@ public class ComputeValue {
         LexicalToken first  = dummy;
         LexicalToken second = dummy;
 
-        rawInput = removeFields(rawInput);
+//        rawInput = removeFields(rawInput);
         int index = rawInput.length() - 1;
 
         while (index >= 0) {
@@ -66,27 +66,27 @@ public class ComputeValue {
         return new LexicalToken(rawToken, false);
     }
 
-    private String removeFields(String rawInput /* , Table table, index or record */) {
-
-        String result = "";
-        StringTokenizer tokenizer = new StringTokenizer(rawInput, delimiters, true);
-
-        while (tokenizer.hasMoreTokens()) {
-            String string = tokenizer.nextToken();
-
-            if (delimiters.contains(string) || string.contains("\'") || string.contains("\""))
-                result += string;
-            else {
-                try {
-                    int num = Integer.parseInt(string);
-                    result += string;
-                } catch (NumberFormatException e) {
-                    // it is a field
-                    // TODO replace it with actual value --> An INT or VARCHAR in quotations
-                    // TODO how to find out the record with which should be replaced the fields
-                }
-            }
-        }
-        return result;
-    }
+//    private String removeFields(String rawInput /* , Table table, index or record */) {
+//
+//        String result = "";
+//        StringTokenizer tokenizer = new StringTokenizer(rawInput, delimiters, true);
+//
+//        while (tokenizer.hasMoreTokens()) {
+//            String string = tokenizer.nextToken();
+//
+//            if (delimiters.contains(string) || string.contains("\'") || string.contains("\""))
+//                result += string;
+//            else {
+//                try {
+//                    int num = Integer.parseInt(string);
+//                    result += string;
+//                } catch (NumberFormatException e) {
+//                    // it is a field
+//                    // TODO replace it with actual value --> An INT or VARCHAR in quotations
+//                    // TODO how to find out the record with which should be replaced the fields
+//                }
+//            }
+//        }
+//        return result;
+//    }
 }
