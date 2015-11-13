@@ -1,9 +1,9 @@
 package dbms.engine;
 
-import com.sun.rowset.internal.Row;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
+import dbms.parser.TupleCondition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,6 +12,11 @@ import java.util.List;
 import static dbms.util.LanguageUtils.throwExecError;
 
 public class DatabaseCore {
+    public static final int COMPARISON_TYPE_EQUAL = 0;
+    public static final int COMPARISON_TYPE_GREATER = 1;
+    public static final int COMPARISON_TYPE_GREATER_OR_EQUAL = 2;
+    public static final int COMPARISON_TYPE_LESS_THAN = 3;
+    public static final int COMPARISON_TYPE_LESS_THAN_OR_EQUAL = 4;
 
     public static HashMap<String, Database> databases;
 
@@ -157,6 +162,111 @@ public class DatabaseCore {
     }
 
 
+    public static void delete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        for (Table.Row row: contentsMustBeDelete) {
+            table.removeRow(row);
+        }
+    }
+
+    public static ArrayList<Table.Row> getContents(String tableName, String colName, LexicalToken computeValue, int type) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+
+        // check table exists
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        ArrayList<Table.Row> resultRows = new ArrayList<>();
+        int colIndex = -1;
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            if (table.getColumnAt(i).name.equalsIgnoreCase(colName)) {
+                colIndex = i;
+                break;
+            }
+        }
+
+        if (colIndex == -1)
+            throwExecError("The given column name doesn't match to any case: %s", colName);
+
+        Table.ColumnType colType = table.getColumnAt(colIndex).type;
+
+        String value = computeValue.getValue();
+
+        switch (type) {
+            case COMPARISON_TYPE_EQUAL:
+                for (Table.Row row: table.getContents()) {
+                    Object objVal = row.getValue(colIndex); // TODO may cause some bugs !
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) == (Long)objVal)
+                            resultRows.add(row);
+                    } else {
+                        if (value.equals(objVal))
+                            resultRows.add(row);
+                    }
+                }
+                break;
+
+            case COMPARISON_TYPE_GREATER:
+                for (Table.Row row: table.getContents()) {
+                    Object objVal = row.getValue(colIndex);
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) > (Long)objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+                }
+                break;
+
+            case COMPARISON_TYPE_GREATER_OR_EQUAL:
+                for (Table.Row row: table.getContents()) {
+                    Object objVal = row.getValue(colIndex);
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) >= (Long)objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+                }
+                break;
+
+            case COMPARISON_TYPE_LESS_THAN:
+                for (Table.Row row: table.getContents()) {
+                    Object objVal = row.getValue(colIndex);
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) < (Long)objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+                }
+                break;
+
+            case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
+                for (Table.Row row: table.getContents()) {
+                    Object objVal = row.getValue(colIndex);
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) <= (Long)objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+                }
+                break;
+
+            default:
+                System.err.println("mage msihe ?! :|");
+                break;
+        }
+        return resultRows;
+    }
+
     public static void printTable(String tableName) throws CoSQLQueryExecutionError {
         Table table = defaultDatabase.getTable(tableName);
 
@@ -166,5 +276,14 @@ public class DatabaseCore {
         }
 
         System.out.println(table);
+    }
+
+    public static Table getTable (String tableName) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+        // if table doesn't exist
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+        return table;
     }
 }

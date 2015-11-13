@@ -76,6 +76,8 @@ public class Table implements Serializable {
         this.contents.add(new Row(args));
     }
 
+    public void removeRow(Row row) {this.contents.remove(row);}
+
     public ArrayList<Row> getContents() {
         return contents;
     }
@@ -103,12 +105,20 @@ public class Table implements Serializable {
         return result.toString();
     }
 
-    private class Row implements Serializable {
+    public class Row implements Serializable {
 
         ArrayList<Object> values;
 
         public Row(ArrayList<Object> values) {
             this.values = values;
+        }
+
+        public ArrayList<Object> getValues() {
+            return values;
+        }
+
+        public Object getValue(int index) {
+            return values.get(index);
         }
 
         @Override

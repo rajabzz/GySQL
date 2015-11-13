@@ -58,6 +58,8 @@ public class QueryParser {
             update(parseData);
         } else if (next.equalsIgnoreCase("select")) {
             select(parseData);
+        } else if (next.equalsIgnoreCase("delete")) {
+            delete(parseData);
         } else if (next.equalsIgnoreCase("print")) { // for debugging only
             print(parseData);
         } else {
@@ -174,7 +176,7 @@ public class QueryParser {
         }
         parseData.goPrev();
 
-        TupleCondition tupleCondition = new TupleCondition(condition);
+        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
     }
 
 
@@ -190,7 +192,34 @@ public class QueryParser {
             columnNames.add(lookahead);
         }
 
-        
+
+    }
+
+    private void delete(ParseData parseData) throws CoSQLQueryParseError {
+        // force FROM keyword
+        String lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase("from")) {
+            throwParseError("Expected keyword FROM before %s", lookAhead);
+        }
+
+        String tableName = tableName(parseData);
+
+        // force WHERE keyword
+        lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase("where")) {
+            throwParseError("Expected keyword WHERE before %s", lookAhead);
+        }
+
+        String condition = "";
+        while (!((lookAhead = parseData.next()).equals(";"))) {
+            condition = condition.concat(lookAhead);
+        }
+        parseData.goPrev();
+
+        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
+
+        CoSQLDelete deleteQuery = new CoSQLDelete(tableName, tupleCondition.getContents());
+        parseData.addCommand(deleteQuery);
     }
 
     // this method is for debugging only ..

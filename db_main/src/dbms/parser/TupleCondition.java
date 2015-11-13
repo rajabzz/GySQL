@@ -1,9 +1,12 @@
 package dbms.parser;
 
+import dbms.engine.Database;
+import dbms.engine.DatabaseCore;
+import dbms.engine.Table;
+import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.exceptions.CoSQLQueryParseError;
-import jdk.internal.dynalink.linker.TypeBasedGuardingDynamicLinker;
 
-import java.util.StringTokenizer;
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,47 +49,101 @@ public class TupleCondition {
             Pattern.compile(REGEX_TRUE)
     };
 
+    private ArrayList<Table.Row> contents;
+    private Table table;
     private Matcher matcher;
 
-    public TupleCondition(String rawStr) {
+    public TupleCondition(String rawStr, String tableName) {
         try {
-            ComputeValue valueComputer = new ComputeValue();
+            table = DatabaseCore.getTable(tableName);
             int index = getPatternIndex(rawStr);
+            ArrayList<Table.Row> secondContents;
             switch (index) {
                 case INDEX_NOT:
+                    contents = table.getContents();
+                    secondContents = (new TupleCondition(matcher.group(1), tableName)).getContents();
+                    for (Table.Row row: secondContents) {
+                        if (contents.contains(row)) {
+                            contents.remove(row);
+                        }
+                    }
                     break;
 
                 case INDEX_AND:
+                    contents = (new TupleCondition(matcher.group(1), tableName)).getContents();
+                    secondContents = (new TupleCondition(matcher.group(2), tableName)).getContents();
+                    for (Table.Row row: secondContents) {
+                        if (contents.contains(row)) {
+                            contents.remove(row);
+                        }
+                    }
                     break;
 
                 case INDEX_OR:
+                    contents = (new TupleCondition(matcher.group(1), tableName).getContents());
+                    secondContents = (new TupleCondition(matcher.group(2), tableName)).getContents();
+                    for (Table.Row row: secondContents) {
+                        contents.add(row);
+                    }
                     break;
 
                 case INDEX_EQUAL:
+                    contents = DatabaseCore.getContents(
+                            tableName,
+                            matcher.group(1),
+                            (new ComputeValue()).compute(matcher.group(2)),
+                            DatabaseCore.COMPARISON_TYPE_EQUAL
+                    );
                     break;
 
                 case INDEX_GREATER_OR_EQUAL:
+                    contents = DatabaseCore.getContents(
+                            tableName,
+                            matcher.group(1),
+                            (new ComputeValue()).compute(matcher.group(2)),
+                            DatabaseCore.COMPARISON_TYPE_GREATER_OR_EQUAL
+                    );
                     break;
 
                 case INDEX_GREATER:
+                    contents = DatabaseCore.getContents(
+                            tableName,
+                            matcher.group(1),
+                            (new ComputeValue()).compute(matcher.group(2)),
+                            DatabaseCore.COMPARISON_TYPE_GREATER
+                    );
                     break;
 
                 case INDEX_LESS_THAN:
+                    contents = DatabaseCore.getContents(
+                            tableName,
+                            matcher.group(1),
+                            (new ComputeValue()).compute(matcher.group(2)),
+                            DatabaseCore.COMPARISON_TYPE_LESS_THAN
+                    );
                     break;
 
                 case INDEX_LESS_THAN_OR_EQUAL:
+                    contents = DatabaseCore.getContents(
+                            tableName,
+                            matcher.group(1),
+                            (new ComputeValue()).compute(matcher.group(2)),
+                            DatabaseCore.COMPARISON_TYPE_LESS_THAN_OR_EQUAL
+                    );
                     break;
 
                 case INDEX_TRUE:
+                    contents = table.getContents();
                     break;
 
                 case INDEX_FALSE:
+                    contents = new ArrayList<>();
                     break;
 
                 default:
                     System.err.println("mage mishe ?! :|");
             }
-        } catch (CoSQLQueryParseError coSQLQueryParseError) {
+        } catch (CoSQLQueryParseError | CoSQLQueryExecutionError coSQLQueryParseError) {
             coSQLQueryParseError.printStackTrace();
         }
     }
@@ -99,7 +156,7 @@ public class TupleCondition {
         throw new CoSQLQueryParseError("Doesn't match to any TUPLE_CONDITION patterns!");
     }
 
-    public static void main(String[] args) {
-        TupleCondition tupleCondition = new TupleCondition("(ID=92106431) AND (FNAME=\"SAND\")");
+    public ArrayList<Table.Row> getContents() {
+        return contents;
     }
 }
