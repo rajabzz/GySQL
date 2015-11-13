@@ -56,6 +56,8 @@ public class QueryParser {
             insert(parseData);
         } else if (next.equalsIgnoreCase("update")){
             update(parseData);
+        } else if (next.equalsIgnoreCase("select")) {
+            select(parseData);
         } else if (next.equalsIgnoreCase("print")) { // for debugging only
             print(parseData);
         } else {
@@ -156,7 +158,8 @@ public class QueryParser {
 
         // new value for field indicated earlier
         //TODO COMPUTE_VALUE
-        String value = parseData.next();
+        ComputeValue valueComputer = new ComputeValue();
+        LexicalToken computeValue = valueComputer.compute(parseData.next());
 
         // force WHERE keyword
         lookAhead = parseData.next();
@@ -165,8 +168,29 @@ public class QueryParser {
         }
 
         // TODO TUPLE_CONDITION
-        String condition = parseData.next();
+        String condition = "";
+        while (!((lookAhead = parseData.next()).equals(";"))) {
+            condition.concat(lookAhead);
+        }
+        parseData.goPrev();
 
+        TupleCondition tupleCondition = new TupleCondition(condition);
+    }
+
+
+    private void select(ParseData parseData) throws CoSQLQueryParseError {
+        ArrayList<String> columnNames = new ArrayList<>();
+        String lookahead = "";
+        while (!((lookahead = parseData.next()).equalsIgnoreCase("from"))) {
+            if (lookahead.equals(","))
+                continue;
+            if (lookahead.equals(";"))
+                throw new CoSQLQueryParseError();
+
+            columnNames.add(lookahead);
+        }
+
+        
     }
 
     // this method is for debugging only ..
@@ -323,6 +347,11 @@ public class QueryParser {
                 throw new EndOfBufferException();
             }
             return tokens.get(next++).getValue();
+        }
+
+        void goPrev() {
+            if (next != 0)
+                next--;
         }
 
         LexicalToken peek() {

@@ -156,6 +156,7 @@ public class DatabaseCore {
         System.out.println(message);
     }
 
+
     public static void printTable(String tableName) throws CoSQLQueryExecutionError {
         Table table = defaultDatabase.getTable(tableName);
 
