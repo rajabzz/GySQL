@@ -6,10 +6,7 @@ import java.util.StringTokenizer;
 
 import dbms.UserInterface;
 import dbms.engine.Table;
-import dbms.exceptions.CoSQLQueryExecutionError;
-import dbms.exceptions.CoSQLQueryParseError;
-import dbms.exceptions.EndOfBufferException;
-import dbms.exceptions.EndOfSessionException;
+import dbms.exceptions.*;
 import dbms.util.StringUtils;
 import static dbms.engine.Table.Column;
 import static dbms.util.LanguageUtils.throwParseError;
@@ -31,7 +28,7 @@ public class QueryParser {
         this.userInterface = userInterface;
     }
 
-    public void parseAndRun(String query) throws EndOfSessionException, CoSQLQueryParseError, CoSQLQueryExecutionError {
+    public void parseAndRun(String query) throws EndOfSessionException, CoSQLError {
 
         // checking directives, currently message passing is only
         // through exceptions
@@ -47,7 +44,7 @@ public class QueryParser {
 
     // TODO else error for all these
 
-    private void start(ParseData parseData) throws EndOfBufferException, CoSQLQueryParseError, CoSQLQueryExecutionError {
+    private void start(ParseData parseData) throws CoSQLError {
 
         String next = parseData.next();
         if (next.equalsIgnoreCase("create")) {
@@ -182,17 +179,36 @@ public class QueryParser {
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
         ArrayList<String> columnNames = new ArrayList<>();
-        String lookahead = "";
-        while (!((lookahead = parseData.next()).equalsIgnoreCase("from"))) {
-            if (lookahead.equals(","))
+        String lookAhead;
+        while (!((lookAhead = parseData.next()).equalsIgnoreCase("from"))) {
+            if (lookAhead.equals(","))
                 continue;
-            if (lookahead.equals(";"))
+            if (lookAhead.equals(";"))
                 throw new CoSQLQueryParseError();
 
-            columnNames.add(lookahead);
+            columnNames.add(lookAhead);
         }
 
+        String tableName = tableName(parseData);
 
+        // force WHERE keyword
+        lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase("where"))
+            throwParseError("Expected keyword WHERE before %s", lookAhead);
+
+        String condition = "";
+        while (!((lookAhead = parseData.next()).equals(";"))) {
+            condition = condition.concat(lookAhead);
+        }
+        parseData.goPrev();
+
+        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
+        CoSQLSelect selectQuery = new CoSQLSelect(
+                tableName,
+                columnNames,
+                tupleCondition.getContents()
+        );
+        parseData.addCommand(selectQuery);
     }
 
     private void delete(ParseData parseData) throws CoSQLQueryParseError {
@@ -331,7 +347,7 @@ public class QueryParser {
         return columnName;
     }
 
-    private void end(ParseData parseData) throws CoSQLQueryParseError, CoSQLQueryExecutionError {
+    private void end(ParseData parseData) throws CoSQLError {
 
         String eoq = parseData.next();
 
@@ -410,7 +426,7 @@ public class QueryParser {
             return false;
         }
 
-        void batchRun() throws CoSQLQueryExecutionError {
+        void batchRun() throws CoSQLError {
             for (CoSQLCommand command: commands) {
                 command.execute(); // TODO batch run might get fucked if something goes wrong in the middle, proper revert system needed
             }

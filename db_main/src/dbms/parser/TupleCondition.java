@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
  * Created by rajabzz on 11/12/15.
  */
 public class TupleCondition {
-    private static final String REGEX_TRUE = "\bTRUE\b";
-    private static final String REGEX_FALSE = "\bFALSE\b";
+    private static final String REGEX_TRUE = "TRUE";
+    private static final String REGEX_FALSE = "FALSE";
     private static final String REGEX_EQUAL = "(.*)=(.*)";
     private static final String REGEX_LESS_THAN = "(.*)<(.*)";
     private static final String REGEX_LESS_THAN_OR_EQUAL = "(.*)<=(.*)";

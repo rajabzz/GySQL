@@ -1,9 +1,9 @@
 package dbms.engine;
 
+import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
-import dbms.parser.TupleCondition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -174,6 +174,31 @@ public class DatabaseCore {
         }
     }
 
+    public static void select(String tableName, ArrayList<String> colNames, ArrayList<Table.Row> contents) throws CoSQLError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+        ArrayList<Integer> colIndexes = new ArrayList<>();
+        ArrayList<Table.Column> columns = new ArrayList<>();
+        for (String colName: colNames) {
+            colIndexes.add(table.getColumnIndex(colName));
+            columns.add(table.getColumn(colName));
+        }
+        ArrayList<Table.Row> finalContents = new ArrayList<>();
+        for (Table.Row row: contents) {
+            ArrayList<Object> values = new ArrayList<>();
+            for (Integer i: colIndexes) {
+                values.add(row.getValueAt(i));
+            }
+            finalContents.add(new Table.Row(values));
+        }
+
+        Table finalTable = new Table("printable", columns, finalContents);
+        System.out.println(finalTable);
+    }
+
     public static ArrayList<Table.Row> getContents(String tableName, String colName, LexicalToken computeValue, int type) throws CoSQLQueryExecutionError {
         Table table = currentDatabase.getTable(tableName);
 
@@ -201,7 +226,7 @@ public class DatabaseCore {
         switch (type) {
             case COMPARISON_TYPE_EQUAL:
                 for (Table.Row row: table.getContents()) {
-                    Object objVal = row.getValue(colIndex); // TODO may cause some bugs !
+                    Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
                     if (colType.equals(Table.ColumnType.INT)) {
                         if (Long.parseLong(value) == (Long)objVal)
                             resultRows.add(row);
@@ -214,7 +239,7 @@ public class DatabaseCore {
 
             case COMPARISON_TYPE_GREATER:
                 for (Table.Row row: table.getContents()) {
-                    Object objVal = row.getValue(colIndex);
+                    Object objVal = row.getValueAt(colIndex);
                     if (colType.equals(Table.ColumnType.INT)) {
                         if (Long.parseLong(value) > (Long)objVal)
                             resultRows.add(row);
@@ -226,7 +251,7 @@ public class DatabaseCore {
 
             case COMPARISON_TYPE_GREATER_OR_EQUAL:
                 for (Table.Row row: table.getContents()) {
-                    Object objVal = row.getValue(colIndex);
+                    Object objVal = row.getValueAt(colIndex);
                     if (colType.equals(Table.ColumnType.INT)) {
                         if (Long.parseLong(value) >= (Long)objVal)
                             resultRows.add(row);
@@ -238,7 +263,7 @@ public class DatabaseCore {
 
             case COMPARISON_TYPE_LESS_THAN:
                 for (Table.Row row: table.getContents()) {
-                    Object objVal = row.getValue(colIndex);
+                    Object objVal = row.getValueAt(colIndex);
                     if (colType.equals(Table.ColumnType.INT)) {
                         if (Long.parseLong(value) < (Long)objVal)
                             resultRows.add(row);
@@ -250,7 +275,7 @@ public class DatabaseCore {
 
             case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
                 for (Table.Row row: table.getContents()) {
-                    Object objVal = row.getValue(colIndex);
+                    Object objVal = row.getValueAt(colIndex);
                     if (colType.equals(Table.ColumnType.INT)) {
                         if (Long.parseLong(value) <= (Long)objVal)
                             resultRows.add(row);

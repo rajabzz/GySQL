@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Scanner;
 
 import dbms.UserInterface;
+import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.exceptions.CoSQLQueryParseError;
 import dbms.exceptions.EndOfSessionException;
@@ -54,6 +55,8 @@ public class Shell implements UserInterface {
             } catch (CoSQLQueryParseError | CoSQLQueryExecutionError coSQLQueryError) {
                 coSQLQueryError.printStackTrace();
                 System.err.println(coSQLQueryError);
+            } catch (CoSQLError coSQLError) {
+                coSQLError.printStackTrace();
             }
         }
     }

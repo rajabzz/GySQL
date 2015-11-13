@@ -1,6 +1,7 @@
 package dbms.engine;
 
 import com.sun.rowset.internal.Row;
+import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryParseError;
 
 import java.io.Serializable;
@@ -60,12 +61,38 @@ public class Table implements Serializable {
         this.contents = new ArrayList<>();
     }
 
+    public Table(String tableName, ArrayList<Column> columns, ArrayList<Row> contents) {
+        this.tableName = tableName;
+        this.columns = columns;
+        this.contents = contents;
+    }
+
     public int getColumnCount() {
         return columns.size();
     }
 
     public Column getColumnAt(int i) {
         return columns.get(i);
+    }
+
+    public Column getColumn(String colName) throws CoSQLError {
+        for (Column col: columns) {
+            if (col.name.equals(colName))
+                return col;
+        }
+        throw new CoSQLError("No such column found!");
+    }
+
+    public ArrayList<Row> getContents() {
+        return contents;
+    }
+
+    public int getColumnIndex(String colName) throws CoSQLError {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).name.equals(colName))
+                return i;
+        }
+        throw new CoSQLError("No such column found!");
     }
 
     public ArrayList<Column> getColumns() {
@@ -77,10 +104,6 @@ public class Table implements Serializable {
     }
 
     public void removeRow(Row row) {this.contents.remove(row);}
-
-    public ArrayList<Row> getContents() {
-        return contents;
-    }
 
     public void addColumn(String name, ColumnType type) {
         columns.add(new Column(name, type));
@@ -105,7 +128,7 @@ public class Table implements Serializable {
         return result.toString();
     }
 
-    public class Row implements Serializable {
+    public static class Row implements Serializable {
 
         ArrayList<Object> values;
 
@@ -117,7 +140,7 @@ public class Table implements Serializable {
             return values;
         }
 
-        public Object getValue(int index) {
+        public Object getValueAt(int index) {
             return values.get(index);
         }
 
