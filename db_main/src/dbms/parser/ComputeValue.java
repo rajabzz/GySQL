@@ -10,7 +10,7 @@ public class ComputeValue {
      */
     static final String delimiters = "+-*/";
 
-    public LexicalToken compute(String rawInput, Table table,int idx) throws CoSQLQueryParseError{
+    public static LexicalToken compute(String rawInput, Table table,int idx) throws CoSQLQueryParseError{
 
         LexicalToken dummy = new LexicalToken("", true);
         LexicalToken result = dummy;
@@ -57,7 +57,7 @@ public class ComputeValue {
         return result;
     }
 
-    private LexicalToken singleTokenOperate(String rawToken, Table table, int index) throws CoSQLQueryParseError{
+    private static LexicalToken singleTokenOperate(String rawToken, Table table, int index) throws CoSQLQueryParseError{
         // rawToken is INT or String between 's or "s
         if (rawToken.contains("\'") || rawToken.contains("\"")) {
             return new LexicalToken(rawToken.substring(1, rawToken.length()-1), true);
@@ -71,7 +71,7 @@ public class ComputeValue {
         }
     }
 
-    private LexicalToken returnField(String rawInput, Table table, int index) throws CoSQLQueryParseError {
+    private static LexicalToken returnField(String rawInput, Table table, int index) throws CoSQLQueryParseError {
 
         // rawInput is just the column name
         for (int i = 0; i < table.getColumnCount(); i++) {

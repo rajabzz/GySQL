@@ -155,25 +155,35 @@ public class QueryParser {
             throwParseError("Unexpected \'%s\', expecting =", lookAhead);
         }
 
-        // new value for field indicated earlier
-        //TODO COMPUTE_VALUE
-        ComputeValue valueComputer = new ComputeValue();
-        LexicalToken computeValue = valueComputer.compute(parseData.next());
+        // compute value
+        String computeValueStr = "";
+        LexicalToken nextFullToken;
+        while (!(nextFullToken = parseData.nextFullToken()).getValue().equalsIgnoreCase("where")) {
+            String value = nextFullToken.getValue();
+            if (value.equals(";"))
+                throw new CoSQLQueryParseError();
 
-        // force WHERE keyword
-        lookAhead = parseData.next();
-        if (!lookAhead.equalsIgnoreCase("where")) {
-            throwParseError("Expected keyword WHERE before %s", lookAhead);
+            if (nextFullToken.isLiteral()) {
+                computeValueStr = computeValueStr.concat("\"").concat(value).concat("\"");
+            } else {
+                computeValueStr = computeValueStr.concat(nextFullToken.value);
+            }
         }
 
-        // TODO TUPLE_CONDITION
+        // tuple condition
         String condition = "";
-        while (!((lookAhead = parseData.next()).equals(";"))) {
-            condition.concat(lookAhead);
+        while (!((nextFullToken = parseData.nextFullToken()).getValue().equals(";"))) {
+            if (nextFullToken.isLiteral()) {
+                condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
+            } else {
+                condition = condition.concat(nextFullToken.getValue());
+            }
         }
         parseData.goPrev();
 
         TupleCondition tupleCondition = new TupleCondition(condition, tableName);
+        CoSQLUpdate updateQuery = new CoSQLUpdate(tableName, columnName, computeValueStr, tupleCondition.getContents());
+        parseData.addCommand(updateQuery);
     }
 
 
@@ -197,8 +207,13 @@ public class QueryParser {
             throwParseError("Expected keyword WHERE before %s", lookAhead);
 
         String condition = "";
-        while (!((lookAhead = parseData.next()).equals(";"))) {
-            condition = condition.concat(lookAhead);
+        LexicalToken nextFullToken;
+        while (!((nextFullToken = parseData.nextFullToken()).getValue().equals(";"))) {
+            if (nextFullToken.isLiteral()) {
+                condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
+            } else {
+                condition = condition.concat(nextFullToken.getValue());
+            }
         }
         parseData.goPrev();
 
@@ -227,8 +242,13 @@ public class QueryParser {
         }
 
         String condition = "";
-        while (!((lookAhead = parseData.next()).equals(";"))) {
-            condition = condition.concat(lookAhead);
+        LexicalToken nextFullToken;
+        while (!((nextFullToken = parseData.nextFullToken()).getValue().equals(";"))) {
+            if (nextFullToken.isLiteral()) {
+                condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
+            } else {
+                condition = condition.concat(nextFullToken.getValue());
+            }
         }
         parseData.goPrev();
 

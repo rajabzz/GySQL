@@ -56,9 +56,9 @@ public class TupleCondition {
     public TupleCondition(String rawStr, String tableName) {
         try {
             table = DatabaseCore.getTable(tableName);
-            int index = getPatternIndex(rawStr);
+            int patternIndex = getPatternIndex(rawStr);
             ArrayList<Table.Row> secondContents;
-            switch (index) {
+            switch (patternIndex) {
                 case INDEX_NOT:
                     contents = table.getContents();
                     secondContents = (new TupleCondition(matcher.group(1), tableName)).getContents();
@@ -91,7 +91,7 @@ public class TupleCondition {
                     contents = DatabaseCore.getContents(
                             tableName,
                             matcher.group(1),
-                            (new ComputeValue()).compute(matcher.group(2)),
+                            matcher.group(2),
                             DatabaseCore.COMPARISON_TYPE_EQUAL
                     );
                     break;
@@ -100,7 +100,7 @@ public class TupleCondition {
                     contents = DatabaseCore.getContents(
                             tableName,
                             matcher.group(1),
-                            (new ComputeValue()).compute(matcher.group(2)),
+                            matcher.group(2),
                             DatabaseCore.COMPARISON_TYPE_GREATER_OR_EQUAL
                     );
                     break;
@@ -109,7 +109,7 @@ public class TupleCondition {
                     contents = DatabaseCore.getContents(
                             tableName,
                             matcher.group(1),
-                            (new ComputeValue()).compute(matcher.group(2)),
+                            matcher.group(2),
                             DatabaseCore.COMPARISON_TYPE_GREATER
                     );
                     break;
@@ -118,7 +118,7 @@ public class TupleCondition {
                     contents = DatabaseCore.getContents(
                             tableName,
                             matcher.group(1),
-                            (new ComputeValue()).compute(matcher.group(2)),
+                            matcher.group(2),
                             DatabaseCore.COMPARISON_TYPE_LESS_THAN
                     );
                     break;
@@ -127,7 +127,7 @@ public class TupleCondition {
                     contents = DatabaseCore.getContents(
                             tableName,
                             matcher.group(1),
-                            (new ComputeValue()).compute(matcher.group(2)),
+                            matcher.group(2),
                             DatabaseCore.COMPARISON_TYPE_LESS_THAN_OR_EQUAL
                     );
                     break;

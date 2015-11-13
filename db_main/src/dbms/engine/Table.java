@@ -99,6 +99,10 @@ public class Table implements Serializable {
         throw new CoSQLError("No such column found!");
     }
 
+    public int getColumnIndex(Column col) {
+        return columns.indexOf(col);
+    }
+
     public ArrayList<Column> getColumns() {
         return columns;
     }
@@ -107,7 +111,13 @@ public class Table implements Serializable {
         this.contents.add(new Row(args));
     }
 
+    public int getRowCount() { return columns.size(); }
+
     public Row getRowAt(int i) {return contents.get(i);}
+
+    public int getRowIndex(Row row) {
+        return contents.indexOf(row);
+    }
 
     public void removeRow(Row row) {this.contents.remove(row);}
 
@@ -144,6 +154,11 @@ public class Table implements Serializable {
 
         public ArrayList<Object> getValues() {
             return values;
+        }
+
+        public void updateValueAt(int i, Object obj) {
+            values.remove(i);
+            values.add(i, obj);
         }
 
         public Object getValueAt(int index) {
