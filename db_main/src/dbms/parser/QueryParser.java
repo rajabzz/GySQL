@@ -289,11 +289,33 @@ public class QueryParser {
             createDatabase(parseData);
         } else if (lookAhead.equalsIgnoreCase("table")) {
             createTable(parseData);
+        } else if (lookAhead.equalsIgnoreCase("index")) {
+            createIndex(parseData);
         } else {
             String error = String.format("Unexpected \'%s\' after CREATE.", lookAhead);
             throw new CoSQLQueryParseError(error);
         }
 
+    }
+
+    private void createIndex(ParseData parseData) throws CoSQLQueryParseError {
+        String indexName = parseData.next();
+
+        String lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase("on")) {
+            throwParseError("Expected keyword ON before %s", lookAhead);
+        }
+
+        String tableName = tableName(parseData);
+
+        if (!lookAhead.equalsIgnoreCase("(")) {
+            String error = String.format("Expected '(' before %s", lookAhead);
+            throw new CoSQLQueryParseError(error);
+        }
+        // TODO
+
+        CoSQLCreateIndex createIndexQuery = new CoSQLCreateIndex();
+        parseData.addCommand(createIndexQuery);
     }
 
     private void createDatabase(ParseData parseData) throws EndOfBufferException, CoSQLQueryParseError, CoSQLQueryExecutionError {

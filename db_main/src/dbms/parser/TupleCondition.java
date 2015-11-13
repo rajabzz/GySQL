@@ -1,6 +1,5 @@
 package dbms.parser;
 
-import dbms.engine.Database;
 import dbms.engine.DatabaseCore;
 import dbms.engine.Table;
 import dbms.exceptions.CoSQLQueryExecutionError;
