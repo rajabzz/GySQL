@@ -308,10 +308,14 @@ public class QueryParser {
 
         String tableName = tableName(parseData);
 
+        lookAhead = parseData.next();
         if (!lookAhead.equalsIgnoreCase("(")) {
             String error = String.format("Expected '(' before %s", lookAhead);
             throw new CoSQLQueryParseError(error);
         }
+
+        parseData.goToLast();
+
         // TODO
 
         CoSQLCreateIndex createIndexQuery = new CoSQLCreateIndex();
@@ -439,6 +443,10 @@ public class QueryParser {
         void goPrev() {
             if (next != 0)
                 next--;
+        }
+
+        void goToLast() {
+            next = tokens.size() - 1;
         }
 
         LexicalToken peek() {

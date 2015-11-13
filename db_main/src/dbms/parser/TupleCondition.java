@@ -20,9 +20,9 @@ public class TupleCondition {
     private static final String REGEX_LESS_THAN_OR_EQUAL = "(.*)<=(.*)";
     private static final String REGEX_GREATER = "(.*)>(.*)";
     private static final String REGEX_GREATER_OR_EQUAL = "(.*)>=(.*)";
-    private static final String REGEX_AND = "\\((.*)\\) AND \\((.*)\\)";
-    private static final String REGEX_OR = "\\((.*)\\) OR \\((.*)\\)";
-    private static final String REGEX_NOT = "NOT (.*)";
+    private static final String REGEX_AND = "\\((.*)\\)AND\\((.*)\\)";
+    private static final String REGEX_OR = "\\((.*)\\)OR\\((.*)\\)";
+    private static final String REGEX_NOT = "NOT(.*)";
 
     private static final int INDEX_NOT = 0;
     private static final int INDEX_OR = 1;

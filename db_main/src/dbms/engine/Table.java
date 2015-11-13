@@ -111,7 +111,7 @@ public class Table implements Serializable {
         this.contents.add(new Row(args));
     }
 
-    public int getRowCount() { return columns.size(); }
+    public int getRowCount() { return contents.size(); }
 
     public Row getRowAt(int i) {return contents.get(i);}
 
