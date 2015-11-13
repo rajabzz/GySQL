@@ -141,6 +141,8 @@ public class Table implements Serializable {
         for (Row row: contents) {
             result.append("\n").append(row);
         }
+        if (contents.size() == 0)
+            result = new StringBuilder("NO RESULTS");
         return result.toString();
     }
 
@@ -171,7 +173,7 @@ public class Table implements Serializable {
             for (int i = 0; i < values.size(); i++) {
                 result.append(values.get(i));
                 if (i != values.size() - 1) {
-                    result.append(",");
+                    result.append(", ");
                 }
             }
 

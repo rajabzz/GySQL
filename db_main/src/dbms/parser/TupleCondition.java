@@ -71,11 +71,13 @@ public class TupleCondition {
                 case INDEX_AND:
                     contents = (new TupleCondition(matcher.group(1), tableName)).getContents();
                     secondContents = (new TupleCondition(matcher.group(2), tableName)).getContents();
-                    for (Table.Row row: secondContents) {
-                        if (contents.contains(row)) {
-                            contents.remove(row);
+                    ArrayList<Table.Row> lastResponse = new ArrayList<>();
+                    for (Table.Row row: contents) {
+                        if (secondContents.contains(row)) {
+                            lastResponse.add(row);
                         }
                     }
+                    contents = lastResponse;
                     break;
 
                 case INDEX_OR:
