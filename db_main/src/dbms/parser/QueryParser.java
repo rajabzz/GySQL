@@ -145,14 +145,33 @@ public class QueryParser {
         String columnName = columnName(buffer);
 
         // force the '=' character in between
-        lookAhead = buffer.next();
-        if (!lookAhead.equals("=")) {
-            throwParseError("Unexpected \'%s\', expecting =", lookAhead);
-        }
+        force(buffer, "=");
 
         // new value for field indicated earlier
-        String value = buffer.next();
+        LexicalToken value = fieldValue(buffer);
 
+    }
+
+    private LexicalToken fieldValue(Buffer buffer) throws CoSQLQueryParseError {
+
+        // NOTE method must get updated if any new column types are added
+
+        LexicalToken valueToken = buffer.nextFullToken();
+
+        if (!valueToken.isLiteral() && !valueToken.getValue().matches(REGEX_NUMERAL)) {
+            throwParseError("Illegal field value: %s", valueToken.getValue());
+        }
+
+        return valueToken;
+    }
+
+    private void force(Buffer buffer, String keyword) throws CoSQLQueryParseError {
+
+        String lookAhead = buffer.next();
+
+        if (!lookAhead.equalsIgnoreCase(keyword)) {
+            throwParseError("Unexpected \'%s\', expecting %s", lookAhead, buffer);
+        }
     }
 
     private String tableName(Buffer buffer) throws CoSQLQueryParseError {
