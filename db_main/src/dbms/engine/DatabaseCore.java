@@ -1,21 +1,24 @@
 package dbms.engine;
 
-import java.lang.reflect.InvocationTargetException;
+import dbms.exceptions.CoSQLError;
+import dbms.exceptions.CoSQLQueryExecutionError;
+import dbms.exceptions.CoSQLQueryParseError;
+import dbms.parser.ComputeValue;
+import dbms.parser.LexicalToken;
+import dbms.parser.QueryParser;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import dbms.exceptions.CoSQLError;
-import dbms.exceptions.CoSQLQueryExecutionError;
-import dbms.exceptions.CoSQLQueryParseError;
-import dbms.parser.CoSQLInsert;
-import dbms.parser.LexicalToken;
-import dbms.parser.QueryParser;
-
-import static dbms.DatabaseBible.JUDGE_MODE;
 import static dbms.util.LanguageUtils.throwExecError;
 
 public class DatabaseCore {
+    public static final int COMPARISON_TYPE_EQUAL = 0;
+    public static final int COMPARISON_TYPE_GREATER = 1;
+    public static final int COMPARISON_TYPE_GREATER_OR_EQUAL = 2;
+    public static final int COMPARISON_TYPE_LESS_THAN = 3;
+    public static final int COMPARISON_TYPE_LESS_THAN_OR_EQUAL = 4;
 
     public static HashMap<String, Database> databases;
 
@@ -28,7 +31,7 @@ public class DatabaseCore {
         defaultDatabase = new Database("DEFAULT");
 
         // create database list (as hash map, RBT really)
-        databases = new HashMap<String, Database>();
+        databases = new HashMap<>();
 
         // add default database to DB list
         databases.put(defaultDatabase.name, defaultDatabase);
@@ -50,7 +53,7 @@ public class DatabaseCore {
 
         databases.put(name, new Database(name));
 
-        System.out.println("CREATE DATABASE OK");
+        System.out.println("DATABASE CREATED");
     }
 
     // TODO @Urgent null support
@@ -80,10 +83,10 @@ public class DatabaseCore {
                     );
                 }
 
-            } else if (target.getColumnAt(i).type == Table.ColumnType.TEXT) {
+            } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) {
 
-                // expecting literal value
-                if (!values.get(i).isLiteral()) {
+                // expecting literal value or null
+                if (!values.get(i).isLiteral() && !values.get(i).getValue().equalsIgnoreCase("null")) {
                     throwExecError("Insert argument at index %d should be string literal (%s given)",
                         i, values.get(i).getValue()
                     );
@@ -99,7 +102,7 @@ public class DatabaseCore {
 
         // construct value set and parse data (convert to appropriate type)
 
-        ArrayList<Object> dataValueSet = new ArrayList<Object>();
+        ArrayList<Object> dataValueSet = new ArrayList<>();
 
         for (int i=0; i<target.getColumnCount(); i++) {
 
@@ -109,10 +112,14 @@ public class DatabaseCore {
                 long parsed = Long.parseLong(values.get(i).getValue());
                 dataValueSet.add(parsed);
 
-            } else if (target.getColumnAt(i).type == Table.ColumnType.TEXT) { // if varchar
+            } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
-                // add directly
-                dataValueSet.add(values.get(i).getValue());
+                if (values.get(i).getValue().equalsIgnoreCase("null")) {
+                    // add directly
+                    dataValueSet.add(null);
+                } else {
+                    dataValueSet.add(values.get(i).getValue());
+                }
 
             }
 
@@ -120,7 +127,7 @@ public class DatabaseCore {
 
         // finally, insert the parsed
         target.insertRow(dataValueSet);
-
+        System.out.println("RECORD INSERTED");
     }
 
     public static void createTable(String name, List<Table.Column> columns) throws CoSQLQueryExecutionError {
@@ -152,8 +159,180 @@ public class DatabaseCore {
         currentDatabase.addTable(newTable);
 
         // user feedback
-        String message = String.format("CREATE TABLE \'%s\' OK", name);
+        String message = "TABLE CREATED";
         System.out.println(message);
     }
 
+
+    public static void update (String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) throws CoSQLError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        ArrayList<Integer> contentIndexes = new ArrayList<>();
+        int colIndex = table.getColumnIndex(colName);
+        for (Table.Row row: contents) {
+            contentIndexes.add(table.getRowIndex(row));
+        }
+
+        for (Integer index: contentIndexes) {
+            LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
+            if (computeValue.isLiteral()) {
+                table.getRowAt(index).updateValueAt(colIndex, computeValue.getValue());
+            } else {
+                table.getRowAt(index).updateValueAt(colIndex, Long.parseLong(computeValue.getValue()));
+            }
+        }
+    }
+
+
+    public static void delete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        for (Table.Row row: contentsMustBeDelete) {
+            table.removeRow(row);
+        }
+    }
+
+    public static void select(String tableName, ArrayList<String> colNames, ArrayList<Table.Row> contents) throws CoSQLError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+        ArrayList<Integer> colIndexes = new ArrayList<>();
+        ArrayList<Table.Column> columns = new ArrayList<>();
+        for (String colName: colNames) {
+            colIndexes.add(table.getColumnIndex(colName));
+            columns.add(table.getColumn(colName));
+        }
+        ArrayList<Table.Row> finalContents = new ArrayList<>();
+        for (Table.Row row: contents) {
+            ArrayList<Object> values = new ArrayList<>();
+            for (Integer i: colIndexes) {
+                values.add(row.getValueAt(i));
+            }
+            finalContents.add(new Table.Row(values));
+        }
+
+        Table finalTable = new Table("printable", columns, finalContents);
+        System.out.println(finalTable);
+    }
+
+    public static ArrayList<Table.Row> getContents(String tableName, String colName, String computeValueQuery, int type) throws CoSQLQueryExecutionError, CoSQLQueryParseError {
+        Table table = currentDatabase.getTable(tableName);
+
+        // check table exists
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        ArrayList<Table.Row> resultRows = new ArrayList<>();
+        int colIndex = -1;
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            if (table.getColumnAt(i).name.equalsIgnoreCase(colName)) {
+                colIndex = i;
+                break;
+            }
+        }
+
+        if (colIndex == -1)
+            throwExecError("The given column name doesn't match to any case: %s", colName);
+
+        Table.ColumnType colType = table.getColumnAt(colIndex).type;
+
+
+        for (int i = 0; i < table.getRowCount(); i++) {
+
+            LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, i);
+            String value = computedValue.getValue();
+            Table.Row row = table.getRowAt(i);
+            Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
+
+            switch (type) {
+                case COMPARISON_TYPE_EQUAL:
+                        if (colType.equals(Table.ColumnType.INT)) {
+                            if (Long.parseLong(value) == (Long) objVal)
+                                resultRows.add(row);
+                        } else {
+                            if (value.equals(objVal))
+                                resultRows.add(row);
+                        }
+                    break;
+
+                case COMPARISON_TYPE_GREATER:
+                        if (colType.equals(Table.ColumnType.INT)) {
+                            if (Long.parseLong(value) > (Long) objVal)
+                                resultRows.add(row);
+                        } else {
+                            // string comparison ...
+                        }
+
+                    break;
+
+                case COMPARISON_TYPE_GREATER_OR_EQUAL:
+
+                        if (colType.equals(Table.ColumnType.INT)) {
+                            if (Long.parseLong(value) >= (Long) objVal)
+                                resultRows.add(row);
+                        } else {
+                            // string comparison ...
+                        }
+
+                    break;
+
+                case COMPARISON_TYPE_LESS_THAN:
+                        if (colType.equals(Table.ColumnType.INT)) {
+                            if (Long.parseLong(value) < (Long) objVal)
+                                resultRows.add(row);
+                        } else {
+                            // string comparison ...
+                        }
+
+                    break;
+
+                case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
+
+                        if (colType.equals(Table.ColumnType.INT)) {
+                            if (Long.parseLong(value) <= (Long) objVal)
+                                resultRows.add(row);
+                        } else {
+                            // string comparison ...
+                        }
+
+                    break;
+
+                default:
+                    System.err.println("mage msihe ?! :|");
+                    break;
+            }
+        }
+        return resultRows;
+    }
+
+    public static void printTable(String tableName) throws CoSQLQueryExecutionError {
+        Table table = defaultDatabase.getTable(tableName);
+
+        // if table doesn't exist
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        System.out.println(table);
+    }
+
+    public static Table getTable (String tableName) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+        // if table doesn't exist
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+        return table;
+    }
 }

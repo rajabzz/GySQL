@@ -9,7 +9,7 @@ public class Authority implements Serializable {
 
     enum AuthMethod {
         NONE, PASSWORD
-    };
+    }
 
     String user;
 
