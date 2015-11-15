@@ -6,6 +6,10 @@ import dbms.exceptions.CoSQLQueryParseError;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Created by blackvvine on 10/25/15.
@@ -17,8 +21,29 @@ public class Table implements Serializable {
     }
 
     public static class Column {
+
         String name;
         ColumnType type;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Column column = (Column) o;
+
+            if (!name.equals(column.name)) return false;
+            if (type != column.type) return false;
+
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = name.hashCode();
+            result = 31 * result + type.hashCode();
+            return result;
+        }
 
         public Column(String name, String typeStr) throws CoSQLQueryParseError {
 
@@ -49,6 +74,20 @@ public class Table implements Serializable {
         public ColumnType getType() {return type;}
     }
 
+    public static class Index {
+
+        String name;
+        Column column;
+
+        HashMap<Object, HashSet<Row>> index;
+
+        public Index(String name, Column column) {
+            this.name = name;
+            this.column = column;
+            this.index = new HashMap<>();
+        }
+    }
+
     /* name of the table */
     String tableName;
 
@@ -58,11 +97,15 @@ public class Table implements Serializable {
     /* table contents */
     ArrayList<Row> contents;
 
+    /* indexes */
+    HashMap<Column, Index> indexes;
+
     /* default constructor */
     public Table(String name) {
         this.tableName = name;
         this.columns = new ArrayList<>();
         this.contents = new ArrayList<>();
+        this.indexes = new HashMap<>();
     }
 
     public Table(String tableName, ArrayList<Column> columns, ArrayList<Row> contents) {
@@ -107,8 +150,38 @@ public class Table implements Serializable {
         return columns;
     }
 
-    public void insertRow(ArrayList args) {
-        this.contents.add(new Row(args));
+    public void insertRow(ArrayList<Object> args) {
+
+        Row newRow = new Row(args);
+        this.contents.add(newRow);
+
+        for (Index index: indexes.values()) {
+            indexRow(newRow, index);
+        }
+    }
+
+    void indexRow(Row row, Index index) {
+
+        // get index's column position
+        Column c = index.column;
+        int pos = getColumnIndex(c);
+
+        // get value
+        Object value = row.getValueAt(pos);
+
+        // get index list or create
+        HashSet<Row> indexRowsOnValue = index.index.get(value);
+        if (indexRowsOnValue == null) {
+            indexRowsOnValue = new HashSet<>();
+            index.index.put(value, indexRowsOnValue);
+        }
+
+        indexRowsOnValue.add(row);
+
+    }
+
+    public Iterable<Row> getRows() {
+        return contents;
     }
 
     public int getRowCount() { return contents.size(); }
@@ -127,6 +200,46 @@ public class Table implements Serializable {
 
     public void addColumn(Column c) {
         columns.add(c);
+    }
+
+    public void addIndex(Index index) {
+        indexes.put(index.column, index);
+    }
+
+    public void updateIndexAt(int colIndex, int rowIndex) {
+
+        Column column = getColumnAt(colIndex);
+        Row row = getRowAt(rowIndex);
+        Object value = row.getValueAt(colIndex);
+
+        Index idx = indexes.get(column);
+
+        if (idx == null) {
+            return;
+        }
+
+        HashSet<Row> vals = idx.index.get(value);
+        vals.remove(row);
+
+        indexRow(row, idx);
+    }
+
+    public void updateIndexForDelete(Row row) {
+
+        //Index idx = indexes.get(getColumnAt(colIndex));
+
+        for (Index idx: indexes.values()) {
+
+            int colIndex = getColumnIndex(idx.column);
+
+            HashSet<Row> set = idx.index.get(row.getValueAt(colIndex));
+            set.remove(row);
+
+            if (set.isEmpty()) {
+                idx.index.remove(row.getValueAt(colIndex));
+            }
+        }
+
     }
 
     @Override
@@ -165,6 +278,23 @@ public class Table implements Serializable {
 
         public Object getValueAt(int index) {
             return values.get(index);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Row row = (Row) o;
+
+            if (values != null ? !values.equals(row.values) : row.values != null) return false;
+
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            return values != null ? values.hashCode() : 0;
         }
 
         @Override

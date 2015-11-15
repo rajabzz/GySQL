@@ -9,6 +9,7 @@ import dbms.parser.QueryParser;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 
 import static dbms.util.LanguageUtils.throwExecError;
@@ -114,7 +115,9 @@ public class DatabaseCore {
 
             } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
-                if (values.get(i).getValue().equalsIgnoreCase("null")) {
+                LexicalToken tk = values.get(i);
+
+                if (tk.getValue().equalsIgnoreCase("null") && !tk.isLiteral()) {
                     // add directly
                     dataValueSet.add(null);
                 } else {
@@ -163,6 +166,48 @@ public class DatabaseCore {
         System.out.println(message);
     }
 
+    public static void createIndex(String indexName, String tableName, String columnName) throws CoSQLQueryExecutionError {
+
+        Table table = currentDatabase.tables.get(tableName);
+
+        if (table == null) {
+            String s = String.format("No such table: '%s' exists in database.", tableName);
+            throw new CoSQLQueryExecutionError(s);
+        }
+
+        Table.Column column = null;
+        try {
+            column = table.getColumn(columnName);
+        } catch (CoSQLError coSQLError) {
+            String err = String.format("No such column: '%s' exists in table %s.",
+                    columnName,
+                    tableName
+            );
+            throw new CoSQLQueryExecutionError(err);
+        }
+
+        Table.Index index = table.indexes.get(column);
+        if (index != null) {
+            throw new CoSQLQueryExecutionError("An index called '%s' already exists on column %s",
+                index.name,
+                column.getName()
+            );
+        }
+
+        // instantiate new index and add to table
+        index = new Table.Index(indexName, column);
+        table.addIndex(index);
+
+        // create index and add rows
+        for (Table.Row row: table.getRows()) {
+            table.indexRow(row, index);
+        }
+
+        String message = "INDEX CREATED";
+        System.out.println(message);
+
+    }
+
 
     public static void update (String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) throws CoSQLError {
         Table table = currentDatabase.getTable(tableName);
@@ -181,8 +226,10 @@ public class DatabaseCore {
             LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
             if (computeValue.isLiteral()) {
                 table.getRowAt(index).updateValueAt(colIndex, computeValue.getValue());
+                table.updateIndexAt(colIndex, index);
             } else {
                 table.getRowAt(index).updateValueAt(colIndex, Long.parseLong(computeValue.getValue()));
+                table.updateIndexAt(colIndex, index);
             }
         }
     }
@@ -197,6 +244,7 @@ public class DatabaseCore {
 
         for (Table.Row row: contentsMustBeDelete) {
             table.removeRow(row);
+            table.updateIndexForDelete(row);
         }
     }
 
@@ -243,20 +291,25 @@ public class DatabaseCore {
         }
 
         if (colIndex == -1)
-            throwExecError("The given column name doesn't match to any case: %s", colName);
+            throwExecError("The given column name doesn't match < any case: %s", colName);
 
         Table.ColumnType colType = table.getColumnAt(colIndex).type;
+        Table.Column column = table.getColumnAt(colIndex);
 
+        Table.Index idx = table.indexes.get(column);
 
-        for (int i = 0; i < table.getRowCount(); i++) {
+        // if no index on selected column available
+        //if (idx == null) {
 
-            LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, i);
-            String value = computedValue.getValue();
-            Table.Row row = table.getRowAt(i);
-            Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
+            for (int i = 0; i < table.getRowCount(); i++) {
 
-            switch (type) {
-                case COMPARISON_TYPE_EQUAL:
+                LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, i);
+                String value = computedValue.getValue();
+                Table.Row row = table.getRowAt(i);
+                Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
+
+                switch (type) {
+                    case COMPARISON_TYPE_EQUAL:
                         if (colType.equals(Table.ColumnType.INT)) {
                             if (Long.parseLong(value) == (Long) objVal)
                                 resultRows.add(row);
@@ -264,9 +317,9 @@ public class DatabaseCore {
                             if (value.equals(objVal))
                                 resultRows.add(row);
                         }
-                    break;
+                        break;
 
-                case COMPARISON_TYPE_GREATER:
+                    case COMPARISON_TYPE_GREATER:
                         if (colType.equals(Table.ColumnType.INT)) {
                             if (Long.parseLong(value) > (Long) objVal)
                                 resultRows.add(row);
@@ -274,9 +327,9 @@ public class DatabaseCore {
                             // string comparison ...
                         }
 
-                    break;
+                        break;
 
-                case COMPARISON_TYPE_GREATER_OR_EQUAL:
+                    case COMPARISON_TYPE_GREATER_OR_EQUAL:
 
                         if (colType.equals(Table.ColumnType.INT)) {
                             if (Long.parseLong(value) >= (Long) objVal)
@@ -285,9 +338,9 @@ public class DatabaseCore {
                             // string comparison ...
                         }
 
-                    break;
+                        break;
 
-                case COMPARISON_TYPE_LESS_THAN:
+                    case COMPARISON_TYPE_LESS_THAN:
                         if (colType.equals(Table.ColumnType.INT)) {
                             if (Long.parseLong(value) < (Long) objVal)
                                 resultRows.add(row);
@@ -295,9 +348,9 @@ public class DatabaseCore {
                             // string comparison ...
                         }
 
-                    break;
+                        break;
 
-                case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
+                    case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
 
                         if (colType.equals(Table.ColumnType.INT)) {
                             if (Long.parseLong(value) <= (Long) objVal)
@@ -306,13 +359,34 @@ public class DatabaseCore {
                             // string comparison ...
                         }
 
-                    break;
+                        break;
 
-                default:
-                    System.err.println("mage msihe ?! :|");
-                    break;
+                    default:
+                        System.err.println("mage msihe ?! :|");
+                        break;
+                }
             }
+
+        /*
+        } else {
+
+            LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, 0); // TODO @Important remove row index from this
+            String val = computedValue.getValue();
+            Object value = null;
+
+            if (colType == Table.ColumnType.INT) {
+                value = Long.parseLong(val);
+            } else if (colType == Table.ColumnType.VARCHAR) {
+                value = val;
+            }
+
+            if (type == COMPARISON_TYPE_EQUAL) {
+                HashSet<Table.Row> set = idx.index.get(value);
+            }
+
         }
+        */
+
         return resultRows;
     }
 

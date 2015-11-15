@@ -10,4 +10,8 @@ public class CoSQLError extends Exception {
     public CoSQLError(String message) {
         super(message);
     }
+
+    public CoSQLError(String format, String... args) {
+        super(String.format(format, args));
+    }
 }

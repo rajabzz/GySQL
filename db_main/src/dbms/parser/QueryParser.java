@@ -20,6 +20,7 @@ public class QueryParser {
     public static final String REGEX_TABLE_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
     public static final String REGEX_DATABASE_NAME = "^[a-zA-Z\\$][a-zA-Z_\\$0-9]*$";
     public static final String REGEX_NUMERAL = "^[\\+\\-]?[0-9]+$";
+    public static final String REGEX_INDEX_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
 
     private UserInterface userInterface;
     private ParseData parseData;
@@ -46,25 +47,32 @@ public class QueryParser {
 
     private void start(ParseData parseData) throws CoSQLError {
 
-        String next = parseData.next();
-        if (next.equalsIgnoreCase("create")) {
-            create(parseData);
-        } else if (next.equalsIgnoreCase("insert")) {
-            insert(parseData);
-        } else if (next.equalsIgnoreCase("update")){
-            update(parseData);
-        } else if (next.equalsIgnoreCase("select")) {
-            select(parseData);
-        } else if (next.equalsIgnoreCase("delete")) {
-            delete(parseData);
-        } else if (next.equalsIgnoreCase("print")) { // for debugging only
-            print(parseData);
-        } else {
-            // TODO error
-            System.err.println("Invalid command!");
+        try {
+
+            String next = parseData.next();
+            if (next.equalsIgnoreCase("create")) {
+                create(parseData);
+            } else if (next.equalsIgnoreCase("insert")) {
+                insert(parseData);
+            } else if (next.equalsIgnoreCase("update")){
+                update(parseData);
+            } else if (next.equalsIgnoreCase("select")) {
+                select(parseData);
+            } else if (next.equalsIgnoreCase("delete")) {
+                delete(parseData);
+            } else if (next.equalsIgnoreCase("print")) { // for debugging only
+                print(parseData);
+            } else {
+                // TODO error
+                System.err.println("Invalid command!");
+            }
+
+            end(parseData);
+
+        } catch (EndOfBufferException e) {
+            System.err.println("Unexpected end of input");
         }
 
-        end(parseData);
     }
 
     private void insert(ParseData parseData) throws CoSQLQueryParseError {
@@ -281,6 +289,20 @@ public class QueryParser {
         return tableName;
     }
 
+    private String indexName(ParseData parseData) throws CoSQLQueryParseError {
+
+        // get token
+        String indexName = parseData.next();
+
+        // match valid
+        if (!indexName.matches(REGEX_INDEX_NAME)) {
+            String error = String.format("Illegal table name: '%s'", indexName);
+            throw new CoSQLQueryParseError(error);
+        }
+
+        return indexName;
+    }
+
     private void create(ParseData parseData) throws EndOfBufferException, CoSQLQueryParseError, CoSQLQueryExecutionError {
 
         String lookAhead = parseData.next();
@@ -299,26 +321,25 @@ public class QueryParser {
     }
 
     private void createIndex(ParseData parseData) throws CoSQLQueryParseError {
-        String indexName = parseData.next();
 
-        String lookAhead = parseData.next();
-        if (!lookAhead.equalsIgnoreCase("on")) {
-            throwParseError("Expected keyword ON before %s", lookAhead);
-        }
+        String indexName = indexName(parseData);
+
+        // force ON
+        match("on", "Expected keyword ON before %s");
 
         String tableName = tableName(parseData);
 
-        lookAhead = parseData.next();
-        if (!lookAhead.equalsIgnoreCase("(")) {
-            String error = String.format("Expected '(' before %s", lookAhead);
-            throw new CoSQLQueryParseError(error);
-        }
+        // force '('
+        match("(");
 
-        parseData.goToLast();
+        // extract column name
+        String columnName = columnName(parseData);
 
-        // TODO
+        // force ')'
+        match(")");
 
-        CoSQLCreateIndex createIndexQuery = new CoSQLCreateIndex();
+        // create command
+        CoSQLCreateIndex createIndexQuery = new CoSQLCreateIndex(indexName, tableName, columnName);
         parseData.addCommand(createIndexQuery);
     }
 
@@ -338,12 +359,8 @@ public class QueryParser {
 
         String name = tableName(parseData);
 
-        String lookAhead = parseData.next();
-
-        if (!lookAhead.equalsIgnoreCase("(")) {
-            String error = String.format("Expected '(' before %s", lookAhead);
-            throw new CoSQLQueryParseError(error);
-        }
+        // force '('
+        match("(");
 
         ArrayList<Column> columns = new ArrayList<>();
 
@@ -351,7 +368,7 @@ public class QueryParser {
         columns.add(first);
 
         while (true) {
-            lookAhead = parseData.next();
+            String lookAhead = parseData.next();
             if (lookAhead.equals(")")) {
                 break;
             } else if (lookAhead.equals(",")) {
@@ -414,6 +431,22 @@ public class QueryParser {
     private void checkDirectives(String query) throws EndOfSessionException {
         if (query.matches("^\\s*(exit|EXIT|quit|QUIT|finish|FINISH|tamoom)\\s*$")) {
             throw new EndOfSessionException();
+        }
+    }
+
+    private void match(String s) throws CoSQLQueryParseError {
+        String lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase(s)) {
+            String error = String.format("Expected '%s' before %s", s, lookAhead);
+            throw new CoSQLQueryParseError(error);
+        }
+    }
+
+    private void match(String s, String errorMessage) throws CoSQLQueryParseError {
+        String lookAhead = parseData.next();
+        if (!lookAhead.equalsIgnoreCase(s)) {
+            String error = String.format(errorMessage, lookAhead);
+            throw new CoSQLQueryParseError(error);
         }
     }
 

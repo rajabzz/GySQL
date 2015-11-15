@@ -10,4 +10,8 @@ public class CoSQLQueryExecutionError extends CoSQLError {
     public CoSQLQueryExecutionError(String message) {
         super(message);
     }
+
+    public CoSQLQueryExecutionError(String format, String... args) {
+        super(format, args);
+    }
 }
