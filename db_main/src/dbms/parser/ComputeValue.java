@@ -59,7 +59,8 @@ public class ComputeValue {
         return result;
     }
 
-    private static LexicalToken singleTokenOperate(String rawToken, Table table, int index) throws CoSQLQueryParseError{
+    private static LexicalToken singleTokenOperate(String rawToken, Table table, int index) throws CoSQLQueryParseError {
+
         // rawToken is INT or String between 's or "s
         if (rawToken.contains("\'") || rawToken.contains("\"")) {
             return new LexicalToken(rawToken.substring(1, rawToken.length()-1), true);
@@ -71,6 +72,7 @@ public class ComputeValue {
                 return returnField(rawToken, table, index);
             }
         }
+
     }
 
     private static LexicalToken returnField(String rawInput, Table table, int index) throws CoSQLQueryParseError {

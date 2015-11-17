@@ -7,6 +7,7 @@ import dbms.parser.ComputeValue;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
 import dbms.parser.TupleCondition;
+import dbms.parser.ValueComputer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -306,14 +307,16 @@ public class DatabaseCore {
         Table.Column column = table.getColumnAt(colIndex);
 
         // fetch index if any
+        ValueComputer.ValueType computableType = ValueComputer.getType(computeValueQuery);
         Table.Index idx = table.indexes.get(column);
 
-        // if no index on selected column available
-        if (idx == null) {
+        // if no index on selected column, or query is field based
+        if (idx == null || computableType == ValueComputer.ValueType.FIELD_BASED) {
 
+            // iterate through table rows
             for (int i = 0; i < table.getRowCount(); i++) {
 
-                LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, i);
+                Object computedValue = ComputeValue.compute(computeValueQuery, table, i);
                 String value = computedValue.getValue();
                 Table.Row row = table.getRowAt(i);
                 Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
