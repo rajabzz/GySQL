@@ -1,6 +1,7 @@
 package dbms.parser;
 
 import dbms.engine.Table;
+import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryParseError;
 import dbms.exceptions.EndOfBufferException;
 import dbms.util.StringUtils;
@@ -20,8 +21,38 @@ public class ValueComputer {
 
     public static class ParsedTuple {
 
-        public Object computeForRow(Table.Row row) {
+        private List<ValueWrapper> wrappers;
+        private Table table;
 
+        public ParsedTuple(List<ValueWrapper> wrappers, Table table) {
+            this.wrappers = wrappers;
+            this.table = table;
+        }
+
+        public Object computeForRow(Table.Row row) throws CoSQLQueryParseError {
+
+            // list of tokens to be parsed as constant value
+            ArrayList<LexicalToken> tokens = new ArrayList<>(wrappers.size());
+
+            for (ValueWrapper vw: wrappers) {
+                if (vw.token != null) {
+                    tokens.add(vw.token);
+                } else {
+                    if (table.getColumnAt(vw.columnIndex).getType() == Table.ColumnType.INT) {
+                        String value = String.valueOf(row.getValueAt(vw.columnIndex));
+                        tokens.add(new LexicalToken(value, false));
+
+                    } else if (table.getColumnAt(vw.columnIndex).getType() == Table.ColumnType.VARCHAR) {
+                        String value = (String)row.getValueAt(vw.columnIndex);
+                        tokens.add(new LexicalToken(value, true));
+
+                    } else {
+                        System.err.println("Unknown type: " + table.getColumnAt(vw.columnIndex).getType());
+                    }
+                }
+            }
+
+            return computeConstant(tokens);
         }
     }
 
@@ -48,6 +79,22 @@ public class ValueComputer {
 
     public static Object computeConstant(String rawInput) throws CoSQLQueryParseError {
         ParseData parseData = new ParseData(rawInput);
+        boolean hasString = false;
+        while (parseData.hasNext()) {
+            LexicalToken token = parseData.nextFullToken();
+            if (token.isLiteral()) {
+                hasString = true;
+            }
+        }
+
+        parseData.goToFirst();
+        if (hasString)
+            return computeConstantString(parseData);
+        return computeConstantNumber(parseData);
+    }
+
+    public static Object computeConstant(List<LexicalToken> tokens) throws CoSQLQueryParseError {
+        ParseData parseData = new ParseData(tokens);
         boolean hasString = false;
         while (parseData.hasNext()) {
             LexicalToken token = parseData.nextFullToken();
@@ -105,8 +152,45 @@ public class ValueComputer {
         return result;
     }
 
-    public static ParsedTuple computeFieldBased(String rawInput) {
-        // TODO
+    static class ValueWrapper {
+        LexicalToken token;
+        int columnIndex;
+
+        public ValueWrapper(LexicalToken token) {
+            this.token = token;
+            this.columnIndex = -1;
+        }
+
+        public ValueWrapper(int columnIndex) {
+            this.columnIndex = columnIndex;
+        }
+    }
+
+    public static ParsedTuple computeFieldBased(String rawInput, Table table) throws CoSQLQueryParseError {
+
+        // TODO test
+
+        List<LexicalToken> tokens = StringUtils.tokenizeQuery(rawInput);
+        List<ValueWrapper> wrapperList = new ArrayList<>();
+
+        for (LexicalToken token : tokens) {
+            if (!token.isLiteral() && !token.getValue().matches("^\\d+$")) {
+                // if ought to be a column name
+                String colName = token.getValue();
+                try {
+                    int colIndex = table.getColumnIndex(colName);
+                    wrapperList.add(new ValueWrapper(colIndex));
+                } catch (CoSQLError coSQLError) {
+                    throw new CoSQLQueryParseError("No such column '%s'");
+                }
+
+            } else {
+                // if constant value
+                wrapperList.add(new ValueWrapper(token));
+            }
+        }
+
+        return new ParsedTuple(wrapperList, table);
     }
 
     private static class ParseData {
@@ -161,6 +245,11 @@ public class ValueComputer {
 
         ParseData(String command) throws CoSQLQueryParseError {
             tokens = StringUtils.tokenizeQuery(command);
+            next = 0;
+        }
+
+        ParseData(List<LexicalToken> tokens) throws CoSQLQueryParseError {
+            this.tokens = tokens;
             next = 0;
         }
     }

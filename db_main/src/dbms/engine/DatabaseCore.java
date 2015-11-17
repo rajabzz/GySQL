@@ -338,7 +338,7 @@ public class DatabaseCore {
         if (valueType == ValueComputer.ValueType.CONSTANT) {
             constantValue = ValueComputer.computeConstant(computeValueQuery);
         } else {
-            computer = ValueComputer.computeFieldBased(computeValueQuery);
+            computer = ValueComputer.computeFieldBased(computeValueQuery, table);
         }
 
         // if no index on selected column, or query is field based
