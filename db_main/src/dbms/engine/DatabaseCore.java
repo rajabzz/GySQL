@@ -291,7 +291,7 @@ public class DatabaseCore {
             return true;
         }
 
-        if (o1 == false) {
+        if (o1 == null) {
             return false;
         }
 

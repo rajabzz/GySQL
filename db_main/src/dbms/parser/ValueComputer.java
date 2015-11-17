@@ -67,7 +67,7 @@ public class ValueComputer {
 
             if (!delimiters.contains(token.getValue())
                     && !token.isLiteral()
-                    && token.getValue().matches("^\\d+$"))
+                    && !token.getValue().matches("^\\d+$"))
                 hasField = true;
         }
 
@@ -112,7 +112,10 @@ public class ValueComputer {
     private static Object computeConstantString(ParseData parseData) throws EndOfBufferException {
         StringBuilder sb = new StringBuilder();
         while (parseData.hasNext()) {
-            sb.append(parseData.next());
+            String token = parseData.next();
+            if (token.contains("+"))
+                continue;
+            sb.append(token);
         }
         return sb.toString();
     }
@@ -167,6 +170,7 @@ public class ValueComputer {
     }
 
     public static ParsedTuple computeFieldBased(String rawInput, Table table) throws CoSQLQueryParseError {
+        final String delimiters = "+-*/=";
 
         // TODO test
 
@@ -174,14 +178,14 @@ public class ValueComputer {
         List<ValueWrapper> wrapperList = new ArrayList<>();
 
         for (LexicalToken token : tokens) {
-            if (!token.isLiteral() && !token.getValue().matches("^\\d+$")) {
+            if (!token.isLiteral() && !token.getValue().matches("^\\d+$") && !delimiters.contains(token.getValue())) {
                 // if ought to be a column name
                 String colName = token.getValue();
                 try {
                     int colIndex = table.getColumnIndex(colName);
                     wrapperList.add(new ValueWrapper(colIndex));
                 } catch (CoSQLError coSQLError) {
-                    throw new CoSQLQueryParseError("No such column '%s'");
+                    throw new CoSQLQueryParseError(String.format("No such column %s", colName));
                 }
 
             } else {
