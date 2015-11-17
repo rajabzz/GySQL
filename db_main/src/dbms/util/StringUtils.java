@@ -18,7 +18,7 @@ public class StringUtils {
         List<LexicalToken> res = new ArrayList<>();
 
         // use Java tokenizer for raw tokenize
-        StringTokenizer tokenizer = new StringTokenizer(command, " \n\t\r\"\'();,=", true);
+        StringTokenizer tokenizer = new StringTokenizer(command, " \n\t\r\"\'();,=+-/", true);
 
         boolean literalMode = false;
         String buffer = null;

@@ -3,7 +3,6 @@ package dbms.parser;
 import dbms.engine.DatabaseCore;
 import dbms.engine.Table;
 import dbms.exceptions.CoSQLError;
-import dbms.exceptions.CoSQLQueryExecutionError;
 
 import java.util.ArrayList;
 
@@ -24,7 +23,7 @@ public class CoSQLUpdate extends CoSQLCommand {
     }
 
     @Override
-    public void execute() throws CoSQLQueryExecutionError, CoSQLError {
+    public void execute() throws CoSQLError {
         DatabaseCore.update(tableName, colName, rawComputeValue, contents);
     }
 }
