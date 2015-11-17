@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Created by blackvvine on 10/25/15.
@@ -79,12 +80,12 @@ public class Table implements Serializable {
         String name;
         Column column;
 
-        HashMap<Object, HashSet<Row>> index;
+        TreeMap<Object, HashSet<Row>> index;
 
         public Index(String name, Column column) {
             this.name = name;
             this.column = column;
-            this.index = new HashMap<>();
+            this.index = new TreeMap<>();
         }
     }
 

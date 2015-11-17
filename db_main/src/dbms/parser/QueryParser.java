@@ -229,7 +229,7 @@ public class QueryParser {
         CoSQLSelect selectQuery = new CoSQLSelect(
                 tableName,
                 columnNames,
-                tupleCondition.getContents()
+                tupleCondition
         );
         parseData.addCommand(selectQuery);
     }

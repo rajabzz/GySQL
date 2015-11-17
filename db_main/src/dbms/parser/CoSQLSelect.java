@@ -1,7 +1,6 @@
 package dbms.parser;
 
 import dbms.engine.DatabaseCore;
-import dbms.engine.Table;
 import dbms.exceptions.CoSQLError;
 
 import java.util.ArrayList;
@@ -13,16 +12,16 @@ public class CoSQLSelect extends CoSQLCommand{
 
     String tableName;
     ArrayList<String> colNames;
-    ArrayList<Table.Row> contents;
+    TupleCondition tupleCondition;
 
-    public CoSQLSelect(String tableName, ArrayList<String> colNames, ArrayList<Table.Row> contents) {
+    public CoSQLSelect(String tableName, ArrayList<String> colNames, TupleCondition tupleCondition) {
         this.tableName = tableName;
         this.colNames = colNames;
-        this.contents = contents;
+        this.tupleCondition = tupleCondition;
     }
 
     @Override
     public void execute() throws CoSQLError {
-        DatabaseCore.select(tableName, colNames, contents);
+        DatabaseCore.select(tableName, colNames, tupleCondition);
     }
 }

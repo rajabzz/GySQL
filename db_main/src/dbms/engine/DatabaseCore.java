@@ -6,6 +6,7 @@ import dbms.exceptions.CoSQLQueryParseError;
 import dbms.parser.ComputeValue;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
+import dbms.parser.TupleCondition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -248,12 +249,17 @@ public class DatabaseCore {
         }
     }
 
-    public static void select(String tableName, ArrayList<String> colNames, ArrayList<Table.Row> contents) throws CoSQLError {
-        Table table = currentDatabase.getTable(tableName);
+    public static void select(String tableName, ArrayList<String> colNames, TupleCondition tupleCondition) throws CoSQLError {
 
+        // checking if table exists
+        Table table = currentDatabase.getTable(tableName);
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
+
+        // get contents of tuple condition
+        List<Table.Row> contents = tupleCondition.getContents();
+
         ArrayList<Integer> colIndexes = new ArrayList<>();
         ArrayList<Table.Column> columns = new ArrayList<>();
         for (String colName: colNames) {
@@ -281,6 +287,7 @@ public class DatabaseCore {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
+        // get column index
         ArrayList<Table.Row> resultRows = new ArrayList<>();
         int colIndex = -1;
         for (int i = 0; i < table.getColumnCount(); i++) {
@@ -290,16 +297,19 @@ public class DatabaseCore {
             }
         }
 
+        // throw if not found
         if (colIndex == -1)
             throwExecError("The given column name doesn't match < any case: %s", colName);
 
+        // fetch column and type
         Table.ColumnType colType = table.getColumnAt(colIndex).type;
         Table.Column column = table.getColumnAt(colIndex);
 
+        // fetch index if any
         Table.Index idx = table.indexes.get(column);
 
         // if no index on selected column available
-        //if (idx == null) {
+        if (idx == null) {
 
             for (int i = 0; i < table.getRowCount(); i++) {
 
@@ -367,25 +377,67 @@ public class DatabaseCore {
                 }
             }
 
-        /*
         } else {
 
-            LexicalToken computedValue = ComputeValue.compute(computeValueQuery, table, 0); // TODO @Important remove row index from this
-            String val = computedValue.getValue();
-            Object value = null;
+            switch (type) {
 
-            if (colType == Table.ColumnType.INT) {
-                value = Long.parseLong(val);
-            } else if (colType == Table.ColumnType.VARCHAR) {
-                value = val;
-            }
+                case COMPARISON_TYPE_EQUAL: {
+                    idx.index.get()
+                    break;
+                }
 
-            if (type == COMPARISON_TYPE_EQUAL) {
-                HashSet<Table.Row> set = idx.index.get(value);
+                case COMPARISON_TYPE_GREATER: {
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) > (Long) objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+
+                    break;
+                }
+
+                case COMPARISON_TYPE_GREATER_OR_EQUAL: {
+
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) >= (Long) objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+
+                    break;
+                }
+
+                case COMPARISON_TYPE_LESS_THAN: {
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) < (Long) objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+
+                    break;
+                }
+
+                case COMPARISON_TYPE_LESS_THAN_OR_EQUAL: {
+
+                    if (colType.equals(Table.ColumnType.INT)) {
+                        if (Long.parseLong(value) <= (Long) objVal)
+                            resultRows.add(row);
+                    } else {
+                        // string comparison ...
+                    }
+
+                    break;
+                }
+
+                default:
+                    System.err.println("mage msihe ?! :|");
+                    break;
             }
 
         }
-        */
 
         return resultRows;
     }

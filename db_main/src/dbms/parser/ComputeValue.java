@@ -46,8 +46,10 @@ public class ComputeValue {
                     case '*':
                         result = new LexicalToken(String.valueOf(firstVal * secondVal), false);
                         break;
-                    default:    // case '/'
+                    case '/':
                         result = new LexicalToken(String.valueOf(firstVal / secondVal), false);
+                    default:
+                        // TODO throw proper error
                 }
             } else {
                 // other than number computing
