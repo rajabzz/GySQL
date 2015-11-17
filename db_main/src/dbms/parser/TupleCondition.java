@@ -49,12 +49,11 @@ public class TupleCondition {
     };
 
     private ArrayList<Table.Row> contents;
-    private Table table;
     private Matcher matcher;
 
     public TupleCondition(String rawStr, String tableName) {
         try {
-            table = DatabaseCore.getTable(tableName);
+            Table table = DatabaseCore.getTable(tableName);
             int patternIndex = getPatternIndex(rawStr);
             ArrayList<Table.Row> secondContents;
             switch (patternIndex) {
