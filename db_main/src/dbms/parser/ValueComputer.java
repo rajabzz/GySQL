@@ -27,5 +27,8 @@ public class ValueComputer {
         // TODO
     }
 
+    public static ParsedTuple computeFieldBased(String rawInput) {
+        // TODO
+    }
 
 }

@@ -10,13 +10,18 @@ import dbms.parser.TupleCondition;
 import dbms.parser.ValueComputer;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NavigableMap;
+import java.util.Set;
 
 import static dbms.util.LanguageUtils.throwExecError;
 
 public class DatabaseCore {
+
     public static final int COMPARISON_TYPE_EQUAL = 0;
     public static final int COMPARISON_TYPE_GREATER = 1;
     public static final int COMPARISON_TYPE_GREATER_OR_EQUAL = 2;
@@ -280,7 +285,21 @@ public class DatabaseCore {
         System.out.println(finalTable);
     }
 
+    private static boolean objectEquals(Object o1, Object o2) {
+
+        if (o1 == o2) {
+            return true;
+        }
+
+        if (o1 == false) {
+            return false;
+        }
+
+        return o1.equals(o2);
+    }
+
     public static ArrayList<Table.Row> getContents(String tableName, String colName, String computeValueQuery, int type) throws CoSQLQueryExecutionError, CoSQLQueryParseError {
+
         Table table = currentDatabase.getTable(tableName);
 
         // check table exists
@@ -307,94 +326,86 @@ public class DatabaseCore {
         Table.Column column = table.getColumnAt(colIndex);
 
         // fetch index if any
-        ValueComputer.ValueType computableType = ValueComputer.getType(computeValueQuery);
         Table.Index idx = table.indexes.get(column);
 
+        // parse query for its type
+        ValueComputer.ValueType valueType = ValueComputer.getType(computeValueQuery);
+
+        // compute right hand side of operator if it's constant,
+        // otherwise defer an object which computes value for row
+        Object constantValue = null;
+        ValueComputer.ParsedTuple computer = null;
+        if (valueType == ValueComputer.ValueType.CONSTANT) {
+            constantValue = ValueComputer.computeConstant(computeValueQuery);
+        } else {
+            computer = ValueComputer.computeFieldBased(computeValueQuery);
+        }
+
         // if no index on selected column, or query is field based
-        if (idx == null || computableType == ValueComputer.ValueType.FIELD_BASED) {
+        if (idx == null || valueType == ValueComputer.ValueType.FIELD_BASED) {
 
             // iterate through table rows
             for (int i = 0; i < table.getRowCount(); i++) {
 
-                Object computedValue = ComputeValue.compute(computeValueQuery, table, i);
-                String value = computedValue.getValue();
+                // fetch row
                 Table.Row row = table.getRowAt(i);
-                Object objVal = row.getValueAt(colIndex); // TODO may cause some bugs !
 
-                switch (type) {
-                    case COMPARISON_TYPE_EQUAL:
-                        if (colType.equals(Table.ColumnType.INT)) {
-                            if (Long.parseLong(value) == (Long) objVal)
-                                resultRows.add(row);
-                        } else {
-                            if (value.equals(objVal))
-                                resultRows.add(row);
-                        }
-                        break;
+                // decide compute value for row or use the precomputed constant value
+                Object computedValue =
+                        valueType == ValueComputer.ValueType.FIELD_BASED ?
+                                computer.computeForRow(row) : constantValue;
 
-                    case COMPARISON_TYPE_GREATER:
-                        if (colType.equals(Table.ColumnType.INT)) {
-                            if (Long.parseLong(value) > (Long) objVal)
-                                resultRows.add(row);
-                        } else {
-                            // string comparison ...
-                        }
+                //String value = computedValue.getValue();
+                Object rowValue = row.getValueAt(colIndex);
 
-                        break;
+                if (type == COMPARISON_TYPE_EQUAL) { /* check equality */
 
-                    case COMPARISON_TYPE_GREATER_OR_EQUAL:
+                    // check equality and add if positive
+                    if (objectEquals(rowValue, computedValue)) {
+                        resultRows.add(row);
+                    }
 
-                        if (colType.equals(Table.ColumnType.INT)) {
-                            if (Long.parseLong(value) >= (Long) objVal)
-                                resultRows.add(row);
-                        } else {
-                            // string comparison ...
-                        }
+                } else if (rowValue instanceof Comparable) { /* check comparison */
 
-                        break;
+                    // compare values
+                    int cmp = ((Comparator)rowValue).compare(rowValue, constantValue);
 
-                    case COMPARISON_TYPE_LESS_THAN:
-                        if (colType.equals(Table.ColumnType.INT)) {
-                            if (Long.parseLong(value) < (Long) objVal)
-                                resultRows.add(row);
-                        } else {
-                            // string comparison ...
-                        }
+                    if ((type == COMPARISON_TYPE_GREATER && cmp > 0) ||
+                        (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||
+                        (type == COMPARISON_TYPE_LESS_THAN && cmp < 0) ||
+                        (type == COMPARISON_TYPE_LESS_THAN_OR_EQUAL && cmp <= 0)) {
 
-                        break;
+                        resultRows.add(row);
+                    }
 
-                    case COMPARISON_TYPE_LESS_THAN_OR_EQUAL:
-
-                        if (colType.equals(Table.ColumnType.INT)) {
-                            if (Long.parseLong(value) <= (Long) objVal)
-                                resultRows.add(row);
-                        } else {
-                            // string comparison ...
-                        }
-
-                        break;
-
-                    default:
-                        System.err.println("mage msihe ?! :|");
-                        break;
                 }
-            }
 
-        } else {
+                // TODO throw error for non-comparables somewhere before
+
+            } // end for loop
+
+        } else { /* using index */
 
             switch (type) {
 
                 case COMPARISON_TYPE_EQUAL: {
-                    idx.index.get()
+
+                    // check index values for given constant and
+                    // return data if any
+                    HashSet<Table.Row> indexedResult = idx.index.get(constantValue);
+                    if (indexedResult != null) {
+                        resultRows.addAll(indexedResult);
+                    }
+
                     break;
                 }
 
                 case COMPARISON_TYPE_GREATER: {
-                    if (colType.equals(Table.ColumnType.INT)) {
-                        if (Long.parseLong(value) > (Long) objVal)
-                            resultRows.add(row);
-                    } else {
-                        // string comparison ...
+
+                    Collection<HashSet<Table.Row>> sets = idx.index.subMap(constantValue, false, idx.index.lastKey(), true).values();
+
+                    for (HashSet<Table.Row> s: sets) {
+                       resultRows.addAll(s);
                     }
 
                     break;
@@ -402,22 +413,24 @@ public class DatabaseCore {
 
                 case COMPARISON_TYPE_GREATER_OR_EQUAL: {
 
-                    if (colType.equals(Table.ColumnType.INT)) {
-                        if (Long.parseLong(value) >= (Long) objVal)
-                            resultRows.add(row);
-                    } else {
-                        // string comparison ...
+                    Collection<HashSet<Table.Row>> sets = idx.index.subMap(constantValue, true, idx.index.lastKey(), true).values();
+
+                    for (HashSet<Table.Row> s: sets) {
+                        resultRows.addAll(s);
                     }
 
                     break;
                 }
 
                 case COMPARISON_TYPE_LESS_THAN: {
-                    if (colType.equals(Table.ColumnType.INT)) {
-                        if (Long.parseLong(value) < (Long) objVal)
-                            resultRows.add(row);
-                    } else {
-                        // string comparison ...
+
+                    Collection<HashSet<Table.Row>> sets = idx.index.subMap(idx.index.firstKey(), true, computeValueQuery, false).values();
+
+                    for (HashSet<Table.Row> s: sets) {
+                        for (Table.Row r: s) {
+                            if (r.getValueAt(colIndex) != null)
+                                resultRows.add(r);
+                        }
                     }
 
                     break;
@@ -425,11 +438,13 @@ public class DatabaseCore {
 
                 case COMPARISON_TYPE_LESS_THAN_OR_EQUAL: {
 
-                    if (colType.equals(Table.ColumnType.INT)) {
-                        if (Long.parseLong(value) <= (Long) objVal)
-                            resultRows.add(row);
-                    } else {
-                        // string comparison ...
+                    Collection<HashSet<Table.Row>> sets = idx.index.subMap(idx.index.firstKey(), true, computeValueQuery, true).values();
+
+                    for (HashSet<Table.Row> s: sets) {
+                        for (Table.Row r: s) {
+                            if (r.getValueAt(colIndex) != null)
+                                resultRows.add(r);
+                        }
                     }
 
                     break;
@@ -438,9 +453,10 @@ public class DatabaseCore {
                 default:
                     System.err.println("mage msihe ?! :|");
                     break;
+
             }
 
-        }
+        } // end index use
 
         return resultRows;
     }

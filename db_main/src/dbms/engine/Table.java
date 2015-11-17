@@ -3,9 +3,11 @@ package dbms.engine;
 import com.sun.rowset.internal.Row;
 import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryParseError;
+import dbms.util.StringUtils;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,9 +85,37 @@ public class Table implements Serializable {
         TreeMap<Object, HashSet<Row>> index;
 
         public Index(String name, Column column) {
+
             this.name = name;
             this.column = column;
-            this.index = new TreeMap<>();
+
+            if (column.type == ColumnType.INT) {
+
+                this.index = new TreeMap<Object, HashSet<Row>>(new Comparator<Object>() {
+                    @Override
+                    public int compare(Object o1, Object o2) {
+                        return Long.compare((Long)o1, (Long)o2);
+                    }
+                });
+
+            } else if (column.type == ColumnType.VARCHAR) {
+
+                this.index = new TreeMap<Object, HashSet<Row>>(new Comparator<Object>() {
+                    @Override
+                    public int compare(Object o1, Object o2) {
+                        if (o1 == o2) {
+                            return 0;
+                        }
+                        if (o1 == null) {
+                            return -1;
+                        }
+                        return ((String)o1).compareTo((String) o2);
+                    }
+                });
+
+            } else {
+                System.err.println("Bad column type in Index constructor");
+            }
         }
     }
 
