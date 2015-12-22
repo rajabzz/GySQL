@@ -9,9 +9,8 @@ import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Created by rajabzz on 11/12/15.
- */
+
+
 public class TupleCondition {
     private static final String REGEX_TRUE = "TRUE";
     private static final String REGEX_FALSE = "FALSE";

@@ -9,9 +9,8 @@ import dbms.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Created by blackvvine on 11/17/15.
- */
+
+
 public class ValueComputer {
 
     public enum ValueType {
@@ -181,7 +180,7 @@ public class ValueComputer {
                     int colIndex = table.getColumnIndex(colName);
                     wrapperList.add(new ValueWrapper(colIndex));
                 } catch (CoSQLError coSQLError) {
-                    throw new CoSQLQueryParseError("No such column '%s'");
+                    throw new CoSQLQueryParseError(String.format("No such column '%s'", colName));
                 }
 
             } else {

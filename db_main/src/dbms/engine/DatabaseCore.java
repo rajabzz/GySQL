@@ -291,7 +291,7 @@ public class DatabaseCore {
             return true;
         }
 
-        if (o1 == false) {
+        if (o1 == null) {
             return false;
         }
 
@@ -355,7 +355,6 @@ public class DatabaseCore {
                         valueType == ValueComputer.ValueType.FIELD_BASED ?
                                 computer.computeForRow(row) : constantValue;
 
-                //String value = computedValue.getValue();
                 Object rowValue = row.getValueAt(colIndex);
 
                 if (type == COMPARISON_TYPE_EQUAL) { /* check equality */
@@ -368,7 +367,7 @@ public class DatabaseCore {
                 } else if (rowValue instanceof Comparable) { /* check comparison */
 
                     // compare values
-                    int cmp = ((Comparator)rowValue).compare(rowValue, constantValue);
+                    int cmp = ((Comparable)rowValue).compareTo(computedValue);
 
                     if ((type == COMPARISON_TYPE_GREATER && cmp > 0) ||
                         (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||

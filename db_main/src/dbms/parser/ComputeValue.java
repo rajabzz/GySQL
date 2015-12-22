@@ -5,9 +5,6 @@ import dbms.exceptions.CoSQLQueryParseError;
 
 public class ComputeValue {
 
-    /**
-     * Author: Fucking Molla
-     */
     static final String delimiters = "+-*/";
 
     public static LexicalToken compute(String rawInput, Table table,int idx) throws CoSQLQueryParseError{

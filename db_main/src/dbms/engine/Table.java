@@ -14,9 +14,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.TreeMap;
 
-/**
- * Created by blackvvine on 10/25/15.
- */
+
+
 public class Table implements Serializable {
 
     public enum ColumnType {
@@ -170,7 +169,7 @@ public class Table implements Serializable {
             if (columns.get(i).name.equals(colName))
                 return i;
         }
-        throw new CoSQLError("No such column found!");
+        throw new CoSQLError("No such column '%s' found!", colName);
     }
 
     public int getColumnIndex(Column col) {

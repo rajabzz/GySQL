@@ -511,7 +511,7 @@ public class QueryParser {
 
         void batchRun() throws CoSQLError {
             for (CoSQLCommand command: commands) {
-                command.execute(); // TODO batch run might get fucked if something goes wrong in the middle, proper revert system needed
+                command.execute(); // TODO batch run might get messed if something goes wrong in the middle, proper revert system needed
             }
         }
 
