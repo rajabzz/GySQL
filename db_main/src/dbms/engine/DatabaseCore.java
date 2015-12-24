@@ -257,7 +257,7 @@ public class DatabaseCore {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        for (Table.Row row: contentsMustBeDelete) {
+        for (Table.Row row: new ArrayList<Table.Row>(contentsMustBeDelete)) {
             table.removeRow(row);
             table.updateIndexForDelete(row);
         }
