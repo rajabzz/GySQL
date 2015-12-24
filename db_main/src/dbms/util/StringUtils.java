@@ -28,8 +28,7 @@ public class StringUtils {
         while (tokenizer.hasMoreTokens()) {
 
             String tk = tokenizer.nextToken();
-//            System.err.println(tk);
-            
+
             if (tk.equals("\"") || tk.equals("\'")) {
 
                 if (literalMode) {

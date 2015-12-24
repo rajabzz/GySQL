@@ -21,4 +21,8 @@ public class LexicalToken {
         return literal;
     }
 
+    @Override
+    public String toString() {
+        return String.format("<%s %s>", value, literal ? "L" : "NL");
+    }
 }

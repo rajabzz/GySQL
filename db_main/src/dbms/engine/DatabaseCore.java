@@ -223,21 +223,29 @@ public class DatabaseCore {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        ArrayList<Integer> contentIndexes = new ArrayList<>();
+        /*ArrayList<Integer> contentIndexes = new ArrayList<>();
         int colIndex = table.getColumnIndex(colName);
         for (Table.Row row: contents) {
             contentIndexes.add(table.getRowIndex(row));
-        }
+        }*/
 
-        for (Integer index: contentIndexes) {
-            LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
-            if (computeValue.isLiteral()) {
+        int colIndex = table.getColumnIndex(colName);
+
+        ValueComputer.ParsedTuple tuple = ValueComputer.computeFieldBased(rawComputeValue, table);
+
+        for (Table.Row row: contents) {
+            //LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
+
+            Object computeValue = tuple.computeForRow(row);
+            row.updateValueAt(colIndex, computeValue);
+
+            /*if (computeValue.isLiteral()) {
                 table.getRowAt(index).updateValueAt(colIndex, computeValue.getValue());
                 table.updateIndexAt(colIndex, index);
             } else {
                 table.getRowAt(index).updateValueAt(colIndex, Long.parseLong(computeValue.getValue()));
                 table.updateIndexAt(colIndex, index);
-            }
+            }*/
         }
     }
 

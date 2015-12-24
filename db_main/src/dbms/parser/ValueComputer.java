@@ -77,6 +77,9 @@ public class ValueComputer {
     }
 
     public static Object computeConstant(String rawInput) throws CoSQLQueryParseError {
+
+        System.out.println("*** Compute constant for: " + rawInput);
+
         ParseData parseData = new ParseData(rawInput);
         boolean hasString = false;
         while (parseData.hasNext()) {
@@ -111,7 +114,11 @@ public class ValueComputer {
     private static Object computeConstantString(ParseData parseData) throws EndOfBufferException {
         StringBuilder sb = new StringBuilder();
         while (parseData.hasNext()) {
-            sb.append(parseData.next());
+            LexicalToken lt = parseData.nextFullToken();
+            if (lt.isLiteral())
+                sb.append(lt.getValue());
+            else if (!lt.getValue().equals("+"))
+                System.err.println("WARNING: Ignoring unknown String operator '" + lt.getValue() + "'");
         }
         return sb.toString();
     }
@@ -137,7 +144,8 @@ public class ValueComputer {
                 operatorType = OPERATOR_MULTIPLY;
             else if (token.contains("/"))
                 operatorType = OPERATOR_DIVIDE;
-            else if (operatorType == OPERATOR_NOTHING)
+
+            if (operatorType == OPERATOR_NOTHING)
                 result = Long.parseLong(token);
             else if (operatorType == OPERATOR_PLUS)
                 result += Long.parseLong(token);
@@ -145,7 +153,8 @@ public class ValueComputer {
                 result -= Long.parseLong(token);
             else if (operatorType == OPERATOR_MULTIPLY)
                 result *= Long.parseLong(token);
-            else result /= Long.parseLong(token);
+            else if (operatorType == OPERATOR_DIVIDE)
+                result /= Long.parseLong(token);
         }
 
         return result;
@@ -165,15 +174,22 @@ public class ValueComputer {
         }
     }
 
+    private static boolean isColumnName(LexicalToken token) {
+        return !token.isLiteral() && !token.getValue().matches("^\\d+$") && !("();,=+-/".contains(token.getValue()));
+    }
+
     public static ParsedTuple computeFieldBased(String rawInput, Table table) throws CoSQLQueryParseError {
 
         // TODO test
+
+//        System.out.println(">>>>> " + rawInput);
 
         List<LexicalToken> tokens = StringUtils.tokenizeQuery(rawInput);
         List<ValueWrapper> wrapperList = new ArrayList<>();
 
         for (LexicalToken token : tokens) {
-            if (!token.isLiteral() && !token.getValue().matches("^\\d+$")) {
+//            System.out.println(">>>>> token >> " + token);
+            if (isColumnName(token)) {
                 // if ought to be a column name
                 String colName = token.getValue();
                 try {
