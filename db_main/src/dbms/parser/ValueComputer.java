@@ -78,8 +78,6 @@ public class ValueComputer {
 
     public static Object computeConstant(String rawInput) throws CoSQLQueryParseError {
 
-        System.out.println("*** Compute constant for: " + rawInput);
-
         ParseData parseData = new ParseData(rawInput);
         boolean hasString = false;
         while (parseData.hasNext()) {
@@ -136,6 +134,7 @@ public class ValueComputer {
 
         while (parseData.hasNext()) {
             String token = parseData.next();
+
             if (token.contains("+"))
                 operatorType = OPERATOR_PLUS;
             else if (token.contains("-"))
@@ -144,8 +143,7 @@ public class ValueComputer {
                 operatorType = OPERATOR_MULTIPLY;
             else if (token.contains("/"))
                 operatorType = OPERATOR_DIVIDE;
-
-            if (operatorType == OPERATOR_NOTHING)
+            else if (operatorType == OPERATOR_NOTHING)
                 result = Long.parseLong(token);
             else if (operatorType == OPERATOR_PLUS)
                 result += Long.parseLong(token);
@@ -175,7 +173,7 @@ public class ValueComputer {
     }
 
     private static boolean isColumnName(LexicalToken token) {
-        return !token.isLiteral() && !token.getValue().matches("^\\d+$") && !("();,=+-/".contains(token.getValue()));
+        return !token.isLiteral() && !token.getValue().matches("^\\d+$") && !("();,=+-*/".contains(token.getValue()));
     }
 
     public static ParsedTuple computeFieldBased(String rawInput, Table table) throws CoSQLQueryParseError {
