@@ -16,11 +16,14 @@ import static dbms.util.LanguageUtils.throwParseError;
  */
 public class QueryParser {
 
-    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
+    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$"; //TODO CHECK GOOSALE
     public static final String REGEX_TABLE_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
     public static final String REGEX_DATABASE_NAME = "^[a-zA-Z\\$][a-zA-Z_\\$0-9]*$";
     public static final String REGEX_NUMERAL = "^[\\+\\-]?[0-9]+$";
     public static final String REGEX_INDEX_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
+
+    public static final int CART = 0;
+    public static final int JOIN = 1;
 
     private UserInterface userInterface;
     private ParseData parseData;
@@ -197,7 +200,9 @@ public class QueryParser {
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
         ArrayList<String> columnNames = new ArrayList<>();
+        ArrayList<String> tableNames = new ArrayList<>();
         String lookAhead;
+        int selectType;
         while (!((lookAhead = parseData.next()).equalsIgnoreCase("from"))) {
             if (lookAhead.equals(","))
                 continue;
@@ -206,11 +211,20 @@ public class QueryParser {
 
             columnNames.add(lookAhead);
         }
+        //my changes
 
-        String tableName = tableName(parseData);
+        while (!((lookAhead = parseData.next()).equalsIgnoreCase("where"))) {
+            if (lookAhead.equals(",")) {
+                selectType = CART;
+                continue;
+            }
+            if (lookAhead.equalsIgnoreCase("join")) {
+                selectType = JOIN;
+                continue;
+            }
+            tableNames.add(tableName(parseData));
+        }
 
-        // force WHERE keyword
-        lookAhead = parseData.next();
         if (!lookAhead.equalsIgnoreCase("where"))
             throwParseError("Expected keyword WHERE before %s", lookAhead);
 
@@ -220,18 +234,28 @@ public class QueryParser {
             if (nextFullToken.isLiteral()) {
                 condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
             } else {
-                condition = condition.concat(nextFullToken.getValue());
+                String token = nextFullToken.getValue();
+                if (tableNames.size() == 1 && nextFullToken.getValue().contains(".")) {
+                    // remove table name in column name in conditions
+                    // TODO check for floats num error khiz
+                    token = token.substring(token.indexOf(".") + 1);
+                }
+                condition = condition.concat(token);
             }
         }
         parseData.goPrev();
 
-        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
-        CoSQLSelect selectQuery = new CoSQLSelect(
-                tableName,
-                columnNames,
-                tupleCondition
-        );
-        parseData.addCommand(selectQuery);
+        if (tableNames.size() == 1) {
+            TupleCondition tupleCondition = new TupleCondition(condition, tableNames.get(0));
+            CoSQLSelect selectQuery = new CoSQLSelect(
+                    tableNames.get(0),
+                    columnNames,
+                    tupleCondition
+            );
+            parseData.addCommand(selectQuery);
+        } else if (tableNames.size() == 2) {
+
+        }
     }
 
     private void delete(ParseData parseData) throws CoSQLQueryParseError {

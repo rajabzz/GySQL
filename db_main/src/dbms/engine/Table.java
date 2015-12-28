@@ -6,14 +6,7 @@ import dbms.exceptions.CoSQLQueryParseError;
 import dbms.util.StringUtils;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.TreeMap;
-
+import java.util.*;
 
 
 public class Table implements Serializable {
@@ -118,6 +111,11 @@ public class Table implements Serializable {
         }
     }
 
+    /* primary and foreign key index*/
+    int pkIndex;
+    ArrayList<Table> refTables = new ArrayList<>();
+    ArrayList<Integer> fkIndices = new ArrayList<>();
+
     /* name of the table */
     String tableName;
 
@@ -142,6 +140,7 @@ public class Table implements Serializable {
         this.tableName = tableName;
         this.columns = columns;
         this.contents = contents;
+        this.indexes = new HashMap<>();
     }
 
     public int getColumnCount() {
@@ -232,6 +231,11 @@ public class Table implements Serializable {
         columns.add(c);
     }
 
+    public void addAllColumns(Collection<Column> cols) {
+        for (Column c: cols)
+            columns.add(c);
+    }
+
     public void addIndex(Index index) {
         indexes.put(index.column, index);
     }
@@ -276,7 +280,10 @@ public class Table implements Serializable {
     public String toString() {
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < columns.size(); i++) {
-            result.append(columns.get(i).name);
+            String colName = columns.get(i).name;
+            if (colName.contains("."))
+                colName = colName.substring(colName.indexOf(".") + 1);
+            result.append(colName);
             if (i != columns.size() - 1) {
                 result.append(",");
             }
@@ -339,6 +346,91 @@ public class Table implements Serializable {
 
             return result.toString();
         }
+    }
+
+    private static boolean containsIgnoreCase (ArrayList<String> list, String element) {
+        /***
+         * contains method with IgnoreCase
+         */
+        for (String s : list) {
+            if (s.equalsIgnoreCase(element))
+                return true;
+        }
+        return false;
+    }
+
+    private ArrayList<String> getColumnNames () {
+        ArrayList<String> res = new ArrayList<>();
+        for (Column c : columns)
+            res.add(c.getName());
+        return res;
+    }
+
+    public Table cartesianProduct (Table other) {
+        /* queryColNames are the columns in query should be saved by their table name */
+        Table result = new Table("cartesTable");
+        // TODO error if queryColNames.size > 2
+
+        ArrayList<Column> resCol = new ArrayList<>();
+        for (Column c : this.columns) {
+            String fullColName = this.tableName + "." + c.getName();
+            resCol.add(new Column(fullColName, c.type));
+        }
+
+        for (Column c : other.columns) {
+            String fullColName = other.tableName + "." + c.getName();
+            resCol.add(new Column(fullColName, c.type));
+        }
+        result.addAllColumns(resCol);
+
+        for (Row r : this.contents) {
+            for (Row r2 : other.contents) {
+                ArrayList<Object> vals = new ArrayList<>();
+                vals.addAll(r.getValues());
+                vals.addAll(r2.getValues());
+                Row newRow = new Row(vals);
+                result.contents.add(newRow);
+            }
+        }
+        return result;
+    }
+
+    public Table join (Table other) {
+        // this has refrence to other this.fk = other.pk
+        Table result = new Table("joinTable");
+        // TODO error if queryColNames.size > 2
+
+        ArrayList<Column> resCol = new ArrayList<>();
+        for (Column c : this.columns) {
+            String fullColName = this.tableName + "." + c.getName();
+            resCol.add(new Column(fullColName, c.type));
+        }
+        for (Column c : other.columns) {
+            String fullColName = other.tableName + "." + c.getName();
+            resCol.add(new Column(fullColName, c.type));
+        }
+        result.addAllColumns(resCol);
+
+        int fkIndex = fkIndices.get(refTables.indexOf(other));
+        for (Row r : contents) {
+            ArrayList<Object> vals = new ArrayList<>();
+            vals.addAll(r.getValues());
+            Object key = r.getValueAt(fkIndex);
+            Index idx = other.indexes.get(this.getColumnAt(pkIndex));
+            HashSet<Table.Row> indexedResult = idx.index.get(key);
+            ArrayList<Table.Row> resultRows = new ArrayList<>();
+            if (indexedResult == null)
+                continue; // mapping does not exist
+            else
+                resultRows.addAll(indexedResult);
+            // TODO error if resRows.size > 1 (every fk map to one pk)
+            Row mappedRow = resultRows.get(0);
+            vals.addAll(mappedRow.getValues());
+            // TODO error if vals.size != this.colCount + other.colCount (pk)
+            Row newRow = new Row(vals);
+            result.contents.add(newRow);
+        }
+        return result;
     }
 
 }
