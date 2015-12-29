@@ -16,7 +16,7 @@ import static dbms.util.LanguageUtils.throwParseError;
  */
 public class QueryParser {
 
-    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$"; //TODO CHECK GOOSALE
+    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_.\\$][a-zA-Z0-9_.\\$]*$"; //TODO CHECK GOOSALE
     public static final String REGEX_TABLE_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
     public static final String REGEX_DATABASE_NAME = "^[a-zA-Z\\$][a-zA-Z_\\$0-9]*$";
     public static final String REGEX_NUMERAL = "^[\\+\\-]?[0-9]+$";
@@ -202,7 +202,7 @@ public class QueryParser {
         ArrayList<String> columnNames = new ArrayList<>();
         ArrayList<String> tableNames = new ArrayList<>();
         String lookAhead;
-        int selectType;
+        int selectType = 0;
         while (!((lookAhead = parseData.next()).equalsIgnoreCase("from"))) {
             if (lookAhead.equals(","))
                 continue;
@@ -237,7 +237,6 @@ public class QueryParser {
                 String token = nextFullToken.getValue();
                 if (tableNames.size() == 1 && nextFullToken.getValue().contains(".")) {
                     // remove table name in column name in conditions
-                    // TODO check for floats num error khiz
                     token = token.substring(token.indexOf(".") + 1);
                 }
                 condition = condition.concat(token);
@@ -245,17 +244,13 @@ public class QueryParser {
         }
         parseData.goPrev();
 
-        if (tableNames.size() == 1) {
-            TupleCondition tupleCondition = new TupleCondition(condition, tableNames.get(0));
-            CoSQLSelect selectQuery = new CoSQLSelect(
-                    tableNames.get(0),
-                    columnNames,
-                    tupleCondition
-            );
-            parseData.addCommand(selectQuery);
-        } else if (tableNames.size() == 2) {
-
-        }
+        CoSQLSelect selectQuery = new CoSQLSelect(
+                tableNames,
+                columnNames,
+                condition,
+                selectType
+        );
+        parseData.addCommand(selectQuery);
     }
 
     private void delete(ParseData parseData) throws CoSQLQueryParseError {

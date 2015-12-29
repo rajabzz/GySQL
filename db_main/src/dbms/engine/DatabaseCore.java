@@ -9,14 +9,8 @@ import dbms.parser.QueryParser;
 import dbms.parser.TupleCondition;
 import dbms.parser.ValueComputer;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.NavigableMap;
-import java.util.Set;
+import javax.management.Query;
+import java.util.*;
 
 import static dbms.util.LanguageUtils.throwExecError;
 
@@ -96,7 +90,7 @@ public class DatabaseCore {
                 // expecting literal value or null
                 if (!values.get(i).isLiteral() && !values.get(i).getValue().equalsIgnoreCase("null")) {
                     throwExecError("Insert argument at index %d should be string literal (%s given)",
-                        i, values.get(i).getValue()
+                            i, values.get(i).getValue()
                     );
                 }
 
@@ -196,8 +190,8 @@ public class DatabaseCore {
         Table.Index index = table.indexes.get(column);
         if (index != null) {
             throw new CoSQLQueryExecutionError("An index called '%s' already exists on column %s",
-                index.name,
-                column.getName()
+                    index.name,
+                    column.getName()
             );
         }
 
@@ -263,15 +257,19 @@ public class DatabaseCore {
         }
     }
 
-    public static void select(String tableName, ArrayList<String> colNames, TupleCondition tupleCondition) throws CoSQLError {
-
+    public static void select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
         // checking if table exists
         Table table = currentDatabase.getTable(tableName);
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
+        select(table, colNames, rawTupleCondition);
+    }
+
+    public static void select(Table table, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
         // get contents of tuple condition
+        TupleCondition tupleCondition = new TupleCondition(rawTupleCondition, table.tableName);
         List<Table.Row> contents = tupleCondition.getContents();
 
         ArrayList<Integer> colIndexes = new ArrayList<>();
@@ -291,6 +289,18 @@ public class DatabaseCore {
 
         Table finalTable = new Table("printable", columns, finalContents);
         System.out.println(finalTable);
+    }
+
+
+    public static void select(ArrayList<String> tableNames, ArrayList<String> colNames, String rawTupleCondition, int type) throws CoSQLError {
+        Table table1 = currentDatabase.getTable(tableNames.get(0));
+        Table table2 = currentDatabase.getTable(tableNames.get(1));
+        if (table1 == null || table2 == null) {
+            throwExecError("Incorrect table name(s) !");
+        }
+        Table resultTable = (type == QueryParser.JOIN ? table1.join(table2) : table1.cartesianProduct(table2));
+
+        select(resultTable, colNames, rawTupleCondition);
     }
 
     private static boolean objectEquals(Object o1, Object o2) {
@@ -378,9 +388,9 @@ public class DatabaseCore {
                     int cmp = ((Comparable)rowValue).compareTo(computedValue);
 
                     if ((type == COMPARISON_TYPE_GREATER && cmp > 0) ||
-                        (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||
-                        (type == COMPARISON_TYPE_LESS_THAN && cmp < 0) ||
-                        (type == COMPARISON_TYPE_LESS_THAN_OR_EQUAL && cmp <= 0)) {
+                            (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||
+                            (type == COMPARISON_TYPE_LESS_THAN && cmp < 0) ||
+                            (type == COMPARISON_TYPE_LESS_THAN_OR_EQUAL && cmp <= 0)) {
 
                         resultRows.add(row);
                     }
@@ -412,7 +422,7 @@ public class DatabaseCore {
                     Collection<HashSet<Table.Row>> sets = idx.index.subMap(constantValue, false, idx.index.lastKey(), true).values();
 
                     for (HashSet<Table.Row> s: sets) {
-                       resultRows.addAll(s);
+                        resultRows.addAll(s);
                     }
 
                     break;
