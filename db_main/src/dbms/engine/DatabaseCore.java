@@ -80,7 +80,7 @@ public class DatabaseCore {
         }
 
         // check argument types
-        for (int i=0; i<target.getColumnCount(); i++) {
+        for (int i = 0; i < target.getColumnCount(); i++) {
 
             if (target.getColumnAt(i).type == Table.ColumnType.INT) {
 
@@ -96,7 +96,7 @@ public class DatabaseCore {
                 // expecting literal value or null
                 if (!values.get(i).isLiteral() && !values.get(i).getValue().equalsIgnoreCase("null")) {
                     throwExecError("Insert argument at index %d should be string literal (%s given)",
-                        i, values.get(i).getValue()
+                            i, values.get(i).getValue()
                     );
                 }
 
@@ -112,7 +112,7 @@ public class DatabaseCore {
 
         ArrayList<Object> dataValueSet = new ArrayList<>();
 
-        for (int i=0; i<target.getColumnCount(); i++) {
+        for (int i = 0; i < target.getColumnCount(); i++) {
 
             if (target.getColumnAt(i).type == Table.ColumnType.INT) { // if int
 
@@ -126,6 +126,7 @@ public class DatabaseCore {
 
                 if (tk.getValue().equalsIgnoreCase("null") && !tk.isLiteral()) {
                     // add directly
+
                     dataValueSet.add(null);
                 } else {
                     dataValueSet.add(values.get(i).getValue());
@@ -135,17 +136,77 @@ public class DatabaseCore {
 
         }
 
-        // finally, insert the parsed
-        target.insertRow(dataValueSet);
-        System.out.println("RECORD INSERTED");
+        //check for C1 when inserting  pk column
+        boolean isPKError = false;
+        // if(!target.getPKcolumn().equals(null)) {
+        int pkIndex = target.getColumnIndex(target.getPKcolumn());
+        if (pkIndex != -1) {
+            for (Table.Row prev : target.getContents()) {
+                if (prev.getValueAt(pkIndex).equals(dataValueSet.get(pkIndex)) || dataValueSet.get(pkIndex).equals(null)) {
+                    System.out.println("C1 CONSTRAINT FAILED");
+                    isPKError = true;
+                    break;
+                }
+            }
+        }
+        // }
+
+        //C2 check for inserting data in fk columns
+        Table reference;
+        int j = -1;
+        boolean interrupt = false;
+        for (Table.Column c : target.FKcolumns) {
+            j++;
+            int fkIndex = target.getColumnIndex(c);
+            // for (int i = 0; i < dataValueSet.size(); i++) {
+            //   if (dataValueSet.get(i).equals(target.getColumnIndex(fkIndex))) {
+            reference = target.tableReference.get(j);
+            int pkIndexRef = reference.getColumnIndex(reference.getPKcolumn());
+            Object value = dataValueSet.get(fkIndex);
+            if (!reference.exists(value, pkIndexRef)) {
+                interrupt = true;
+                System.out.println("C2 CONSTRAINT FAILED");
+                break;
+            }
+//            for (Table.Row prev : reference.contents) {
+//                System.out.println("data is : " + dataValueSet.get(fkIndex));
+//                System.out.println("prev is : " + prev.getValueAt(pkIndexRef));
+//                if (prev.getValueAt(pkIndexRef).equals(dataValueSet.get(fkIndex))) {
+//                    break;
+//                    interrupt = true;
+//                    System.out.println("i is : " + interrupt);
+//                }
+//            }
+
+
+        }
+
+        if (interrupt == false && isPKError == false) {
+            // finally, insert the parsed
+            target.insertRow(dataValueSet);
+            System.out.println("RECORD INSERTED");
+        }
+//        } else {
+//            target.insertRow(dataValueSet);
+//
+//            interrupt = false;
+//            System.out.println("RECORD INSERTED");
+//        }
+
+
     }
 
-    public static void createTable(String name, List<Table.Column> columns) throws CoSQLQueryExecutionError {
+    public static void createTable(String name, List<Table.Column> columns, String PK, ArrayList<String[]> FKDetails) throws CoSQLQueryExecutionError, CoSQLError {
+
+        boolean Ucascade = false;
+        boolean Urestrict = false;
+        boolean Dcascade = false;
+        boolean Drestrict = false;
 
         // TODO check names legal
 
         // check if name is not unique
-        for (Table table: currentDatabase.tables.values()) {
+        for (Table table : currentDatabase.tables.values()) {
             if (table.tableName.equals(name)) {
                 String error = String.format("Database \'%s\' already contains a table by the name: \'%s\'",
                         currentDatabase.name,
@@ -157,12 +218,34 @@ public class DatabaseCore {
 
         // instantiate
         Table newTable = new Table(name);
+        Table target; //reference table
+//        ArrayList<Table.Column> Fkcolumn = newTable.FKcolumns;
+//        ArrayList<Table> fkTableReference = newTable.tableReference;
 
         // create columns
-        for (Table.Column c: columns) {
-
+        for (Table.Column c : columns) {
             newTable.addColumn(c);
 
+        }
+
+        if (PK != null)
+            newTable.setPKcolumn(PK);
+        for (String[] s : FKDetails) {
+            String FK = s[0];
+
+            target = currentDatabase.getTable(s[1]);
+            target.listener.add(newTable); //pk has references
+
+            if (!target.getPKcolumn().equals(null)) {
+                newTable.FKcolumns.add(newTable.setFKcolumn(FK));
+                newTable.tableReference.add(target); //Fk is referenced to
+            } else
+                System.out.println("C2 CONSTRAINT FAILED");
+
+            String delete = s[2];
+            String update = s[3];
+            newTable.onUpdate.add(update);
+            newTable.onDelete.add(delete);
         }
 
         // add the new table
@@ -196,8 +279,8 @@ public class DatabaseCore {
         Table.Index index = table.indexes.get(column);
         if (index != null) {
             throw new CoSQLQueryExecutionError("An index called '%s' already exists on column %s",
-                index.name,
-                column.getName()
+                    index.name,
+                    column.getName()
             );
         }
 
@@ -206,7 +289,7 @@ public class DatabaseCore {
         table.addIndex(index);
 
         // create index and add rows
-        for (Table.Row row: table.getRows()) {
+        for (Table.Row row : table.getRows()) {
             table.indexRow(row, index);
         }
 
@@ -215,10 +298,8 @@ public class DatabaseCore {
 
     }
 
-
-    public static void update (String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) throws CoSQLError {
+    public static void update(String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) throws CoSQLError {
         Table table = currentDatabase.getTable(tableName);
-
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
@@ -229,15 +310,88 @@ public class DatabaseCore {
             contentIndexes.add(table.getRowIndex(row));
         }*/
 
+        //checking if the wanted column is Fk and get its table reference
+        boolean isFK = false;
+        Table.Column FKwanted;
+        Table refTable = null;
+        int pkColIndex = -1;
+        int i = -1;
+        for (Table.Column c : table.FKcolumns) {
+            i++;
+            if (c.getName().equals(colName)) {
+                FKwanted = c;
+                isFK = true;
+                refTable = table.tableReference.get(i);
+                pkColIndex = refTable.getColumnIndex(refTable.getPKcolumn());
+            }
+        }
+
         int colIndex = table.getColumnIndex(colName);
-
         ValueComputer.ParsedTuple tuple = ValueComputer.computeFieldBased(rawComputeValue, table);
+        int col;
+        boolean error = false;
 
-        for (Table.Row row: contents) {
+        for (Table.Row row : contents) {
             //LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
 
             Object computeValue = tuple.computeForRow(row);
-            row.updateValueAt(colIndex, computeValue);
+            if (colIndex == table.getColumnIndex(table.getPKcolumn())) {
+                for (Table.Row r : table.getContents()) {
+                    if (computeValue.equals(r.getValueAt(colIndex))) {
+                        System.out.println("C1 CONSTRAINT FAILED");
+                        error = true;
+                        break;
+
+                    }
+
+                }
+                if (error) {
+                    continue;
+                }
+
+                //TODO index e row pk vojud nadare
+                Object obj = row.getValueAt(table.getColumnIndex(table.getPKcolumn()));
+                for (Table l : table.listener) {
+
+                    int cool = l.getFkIndex(table);
+                    for (int k = 0; k < l.tableReference.size(); k++) {
+                        if (table.equals(l.tableReference.get(k))) {
+                            if (l.onUpdate.get(k).equalsIgnoreCase("restrict") && l.exists(obj, cool)) {
+                                error = true;
+                                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
+                                break;
+                            }
+                        }
+                        if (error == true)
+                            break;
+                    }
+                }
+                if (error) {
+                    continue;
+                }
+                row.updateValueAt(colIndex, computeValue); //pk updates
+                // fk updates
+                for (Table target : table.listener) {
+                    for (int j = 0; j < target.FKcolumns.size(); j++) {
+                        if (target.tableReference.get(j).equals(table)) {
+                            col = target.getColumnIndex(target.FKcolumns.get(j));
+                            for (Table.Row r2 : target.getContents()) {
+                                if (r2.getValueAt(col).equals(obj))
+                                    r2.updateValueAt(col, computeValue);
+                            }
+                        }
+                    }
+                }
+            } else if (isFK) {
+
+                if (!refTable.exists(computeValue, pkColIndex)) {
+                    System.out.println("C2 CONSTRAINT FAILED");
+                    continue;
+                } else
+                    row.updateValueAt(colIndex, computeValue);
+            } else
+                row.updateValueAt(colIndex, computeValue);
+
 
             /*if (computeValue.isLiteral()) {
                 table.getRowAt(index).updateValueAt(colIndex, computeValue.getValue());
@@ -247,6 +401,8 @@ public class DatabaseCore {
                 table.updateIndexAt(colIndex, index);
             }*/
         }
+        System.out.println(table);
+
     }
 
 
@@ -257,9 +413,38 @@ public class DatabaseCore {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        for (Table.Row row: new ArrayList<Table.Row>(contentsMustBeDelete)) {
-            table.removeRow(row);
-            table.updateIndexForDelete(row);
+
+        for (Table.Row row : new ArrayList<Table.Row>(contentsMustBeDelete)) {
+
+            //if pk doesn't have references then delete it
+            if (table.tableReference.isEmpty()) {
+                table.removeRow(row);
+                table.updateIndexForDelete(row);
+            } else {
+                Object obj = row.getValueAt(table.getColumnIndex(table.getPKcolumn()));
+
+                for (Table l : table.tableReference) {
+                    int cool = l.getFkIndex(table);
+                    for (int k = 0; k < l.tableReference.size(); k++) {
+                        if (table.equals(l.tableReference.get(k))) {
+                            if (l.onDelete.get(k).equalsIgnoreCase("restrict") && l.exists(obj, cool)) {
+                                //referenced FK was restrict and the record existed
+                                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
+                                break;
+                            } else if(l.onDelete.get(k).equalsIgnoreCase("cascade") && l.exists(obj, cool)){
+
+                                //TODO derakhte bazgasht
+                                delete(l.getName() ,  contentsMustBeDelete);
+
+                            }else if(l.onDelete.get(k).equalsIgnoreCase("restrict") && !l.exists(obj, cool)) {
+                                //referenced FK was restrict but the record didn't exist
+                                table.removeRow(row);
+                                table.updateIndexForDelete(row);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -276,14 +461,14 @@ public class DatabaseCore {
 
         ArrayList<Integer> colIndexes = new ArrayList<>();
         ArrayList<Table.Column> columns = new ArrayList<>();
-        for (String colName: colNames) {
+        for (String colName : colNames) {
             colIndexes.add(table.getColumnIndex(colName));
             columns.add(table.getColumn(colName));
         }
         ArrayList<Table.Row> finalContents = new ArrayList<>();
-        for (Table.Row row: contents) {
+        for (Table.Row row : contents) {
             ArrayList<Object> values = new ArrayList<>();
-            for (Integer i: colIndexes) {
+            for (Integer i : colIndexes) {
                 values.add(row.getValueAt(i));
             }
             finalContents.add(new Table.Row(values));
@@ -375,12 +560,12 @@ public class DatabaseCore {
                 } else if (rowValue instanceof Comparable) { /* check comparison */
 
                     // compare values
-                    int cmp = ((Comparable)rowValue).compareTo(computedValue);
+                    int cmp = ((Comparable) rowValue).compareTo(computedValue);
 
                     if ((type == COMPARISON_TYPE_GREATER && cmp > 0) ||
-                        (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||
-                        (type == COMPARISON_TYPE_LESS_THAN && cmp < 0) ||
-                        (type == COMPARISON_TYPE_LESS_THAN_OR_EQUAL && cmp <= 0)) {
+                            (type == COMPARISON_TYPE_GREATER_OR_EQUAL && cmp >= 0) ||
+                            (type == COMPARISON_TYPE_LESS_THAN && cmp < 0) ||
+                            (type == COMPARISON_TYPE_LESS_THAN_OR_EQUAL && cmp <= 0)) {
 
                         resultRows.add(row);
                     }
@@ -411,8 +596,8 @@ public class DatabaseCore {
 
                     Collection<HashSet<Table.Row>> sets = idx.index.subMap(constantValue, false, idx.index.lastKey(), true).values();
 
-                    for (HashSet<Table.Row> s: sets) {
-                       resultRows.addAll(s);
+                    for (HashSet<Table.Row> s : sets) {
+                        resultRows.addAll(s);
                     }
 
                     break;
@@ -422,7 +607,7 @@ public class DatabaseCore {
 
                     Collection<HashSet<Table.Row>> sets = idx.index.subMap(constantValue, true, idx.index.lastKey(), true).values();
 
-                    for (HashSet<Table.Row> s: sets) {
+                    for (HashSet<Table.Row> s : sets) {
                         resultRows.addAll(s);
                     }
 
@@ -433,8 +618,8 @@ public class DatabaseCore {
 
                     Collection<HashSet<Table.Row>> sets = idx.index.subMap(idx.index.firstKey(), true, computeValueQuery, false).values();
 
-                    for (HashSet<Table.Row> s: sets) {
-                        for (Table.Row r: s) {
+                    for (HashSet<Table.Row> s : sets) {
+                        for (Table.Row r : s) {
                             if (r.getValueAt(colIndex) != null)
                                 resultRows.add(r);
                         }
@@ -447,8 +632,8 @@ public class DatabaseCore {
 
                     Collection<HashSet<Table.Row>> sets = idx.index.subMap(idx.index.firstKey(), true, computeValueQuery, true).values();
 
-                    for (HashSet<Table.Row> s: sets) {
-                        for (Table.Row r: s) {
+                    for (HashSet<Table.Row> s : sets) {
+                        for (Table.Row r : s) {
                             if (r.getValueAt(colIndex) != null)
                                 resultRows.add(r);
                         }
@@ -479,7 +664,7 @@ public class DatabaseCore {
         System.out.println(table);
     }
 
-    public static Table getTable (String tableName) throws CoSQLQueryExecutionError {
+    public static Table getTable(String tableName) throws CoSQLQueryExecutionError {
         Table table = currentDatabase.getTable(tableName);
         // if table doesn't exist
         if (table == null) {

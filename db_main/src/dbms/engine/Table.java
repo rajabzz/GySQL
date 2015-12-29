@@ -15,7 +15,6 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 
-
 public class Table implements Serializable {
 
     public enum ColumnType {
@@ -71,9 +70,13 @@ public class Table implements Serializable {
             this.type = type;
         }
 
-        public String getName() {return name;}
+        public String getName() {
+            return name;
+        }
 
-        public ColumnType getType() {return type;}
+        public ColumnType getType() {
+            return type;
+        }
     }
 
     public static class Index {
@@ -93,7 +96,7 @@ public class Table implements Serializable {
                 this.index = new TreeMap<Object, HashSet<Row>>(new Comparator<Object>() {
                     @Override
                     public int compare(Object o1, Object o2) {
-                        return Long.compare((Long)o1, (Long)o2);
+                        return Long.compare((Long) o1, (Long) o2);
                     }
                 });
 
@@ -108,7 +111,7 @@ public class Table implements Serializable {
                         if (o1 == null) {
                             return -1;
                         }
-                        return ((String)o1).compareTo((String) o2);
+                        return ((String) o1).compareTo((String) o2);
                     }
                 });
 
@@ -123,6 +126,20 @@ public class Table implements Serializable {
 
     /* table columns schema */
     ArrayList<Column> columns;
+
+    Column pk = null;
+    Column fk;
+
+    /* table FKs */
+    ArrayList<Column> FKcolumns = new ArrayList<>();
+
+    /* tables that fks are referenced of */
+    ArrayList<Table> tableReference = new ArrayList<>();
+
+    /* tables that pk has references */
+    ArrayList<Table> listener = new ArrayList<>();
+    ArrayList<String> onUpdate = new ArrayList<>();
+    ArrayList<String> onDelete = new ArrayList<>();
 
     /* table contents */
     ArrayList<Row> contents;
@@ -144,6 +161,26 @@ public class Table implements Serializable {
         this.contents = contents;
     }
 
+    public String getName() {
+        return tableName;
+    }
+
+    public void setPKcolumn(String pkName) throws CoSQLError {
+        pk = getColumn(pkName);
+    }
+
+    public Column getPKcolumn() {
+        return pk;
+    }
+
+    public Column setFKcolumn(String fkName) throws CoSQLError {
+        return fk = getColumn(fkName);
+    }
+
+    public Column getFKcolumn() {
+        return fk;
+    }
+
     public int getColumnCount() {
         return columns.size();
     }
@@ -153,7 +190,7 @@ public class Table implements Serializable {
     }
 
     public Column getColumn(String colName) throws CoSQLError {
-        for (Column col: columns) {
+        for (Column col : columns) {
             if (col.name.equals(colName))
                 return col;
         }
@@ -182,11 +219,24 @@ public class Table implements Serializable {
 
     public void insertRow(ArrayList<Object> args) {
 
+//        int i = getColumnIndex(pk);
+//        for (Row prev : contents) {
+//            if (prev.getValueAt(i).equals(args.get(i))) {
+//                System.out.println("C1 CONSTRAINT FAILED");
+//                return;
+//            }
+//        }
+//        if (args.get(i) == null) {
+//            System.out.println("C1 CONSTRAINT FAILED");
+//            return;
+//
+//        } else {
         Row newRow = new Row(args);
         this.contents.add(newRow);
 
-        for (Index index: indexes.values()) {
+        for (Index index : indexes.values()) {
             indexRow(newRow, index);
+
         }
     }
 
@@ -214,15 +264,21 @@ public class Table implements Serializable {
         return contents;
     }
 
-    public int getRowCount() { return contents.size(); }
+    public int getRowCount() {
+        return contents.size();
+    }
 
-    public Row getRowAt(int i) {return contents.get(i);}
+    public Row getRowAt(int i) {
+        return contents.get(i);
+    }
 
     public int getRowIndex(Row row) {
         return contents.indexOf(row);
     }
 
-    public void removeRow(Row row) {this.contents.remove(row);}
+    public void removeRow(Row row) {
+        this.contents.remove(row);
+    }
 
     public void addColumn(String name, ColumnType type) {
         columns.add(new Column(name, type));
@@ -258,7 +314,7 @@ public class Table implements Serializable {
 
         //Index idx = indexes.get(getColumnAt(colIndex));
 
-        for (Index idx: indexes.values()) {
+        for (Index idx : indexes.values()) {
 
             int colIndex = getColumnIndex(idx.column);
 
@@ -281,12 +337,31 @@ public class Table implements Serializable {
                 result.append(",");
             }
         }
-        for (Row row: contents) {
+        for (Row row : contents) {
             result.append("\n").append(row);
         }
         if (contents.size() == 0)
             result = new StringBuilder("NO RESULTS");
         return result.toString();
+    }
+
+    public int getFkIndex(Table ref) {
+
+        for (int i = 0; i < tableReference.size(); i++) {
+            if (ref.equals(tableReference.get(i))) {
+                return ref.getColumnIndex(FKcolumns.get(i));
+            }
+        }
+        return -1;
+    }
+
+    public boolean exists(Object value, int column) {
+
+        for (Row r : contents) {
+            if (r.getValueAt(column).equals(value))
+                return true;
+        }
+        return false;
     }
 
     public static class Row implements Serializable {

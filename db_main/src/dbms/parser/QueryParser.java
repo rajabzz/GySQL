@@ -8,6 +8,7 @@ import dbms.UserInterface;
 import dbms.engine.Table;
 import dbms.exceptions.*;
 import dbms.util.StringUtils;
+
 import static dbms.engine.Table.Column;
 import static dbms.util.LanguageUtils.throwParseError;
 
@@ -54,7 +55,7 @@ public class QueryParser {
                 create(parseData);
             } else if (next.equalsIgnoreCase("insert")) {
                 insert(parseData);
-            } else if (next.equalsIgnoreCase("update")){
+            } else if (next.equalsIgnoreCase("update")) {
                 update(parseData);
             } else if (next.equalsIgnoreCase("select")) {
                 select(parseData);
@@ -380,7 +381,105 @@ public class QueryParser {
             }
         }
 
-        CoSQLCommand command = new CoSQLCreateTable(name, columns);
+        String pkColumn, fkColumn, action1, action2, tableReference;
+        ArrayList<String[]> FKarrays = new ArrayList<>();
+        int i = 0 , j =0;
+        boolean isFK = true;
+        String[] arr2 = new String[4];
+        String lookAhead = parseData.next();
+
+        if (lookAhead.equals(";")) {
+
+            pkColumn = null;
+            //for (String s : arr2) {
+            //  s = null;}
+            //FKarrays.add(arr2);
+            parseData.goPrev();
+        } else {
+
+            /**** PRIMARY KEY ****/
+            if (lookAhead.equalsIgnoreCase("primary")) {
+                j++;
+                parseData.next();
+                pkColumn = columnName(parseData);
+                lookAhead = parseData.next();
+            } else pkColumn = null;
+
+            if (lookAhead.equals(";"))
+                parseData.goPrev();
+            else {
+                while (isFK) {
+                    String[] arr1 = new String[4];
+
+                    /**** FOREIGN KEY ****/
+                    if (lookAhead.equalsIgnoreCase("foreign")) {
+                        parseData.next();
+                        fkColumn = columnName(parseData);
+                        lookAhead = parseData.next();
+                    } else fkColumn = null;
+                    arr1[0] = fkColumn;
+
+                    if (lookAhead.equals(";"))
+                        parseData.goPrev();
+                    else {
+
+                        /**** REFERENCE TABLE ****/
+                        if (lookAhead.equalsIgnoreCase("references")) {
+                            tableReference = tableName(parseData);
+                            lookAhead = parseData.next();
+                        } else tableReference = null;
+                        arr1[1] = tableReference;
+
+                        if (lookAhead.equals(";"))
+                            parseData.goPrev();
+                        else {
+
+                            /**** on delete ****/
+                            if (lookAhead.equalsIgnoreCase("on") && parseData.next().equalsIgnoreCase("delete")) {
+                                j++;
+                                if (parseData.next().equalsIgnoreCase("cascade"))
+                                    action1 = "cascade";
+                                else
+                                    action1 = "restrict";
+                                lookAhead = parseData.next();
+                            } else action1 = null;
+                            arr1[2] = action1;
+
+                            if (lookAhead.equals(";"))
+                                parseData.goPrev();
+                            else {
+
+                                /**** on update ****/
+                                if (lookAhead.equalsIgnoreCase("on") && parseData.next().equalsIgnoreCase("update")) {
+                                    if (parseData.next().equalsIgnoreCase("cascade"))
+                                        action2 = "cascade";
+                                    else
+                                        action2 = "restrict";
+                                    lookAhead = parseData.next();
+                                } else action2 = null;
+
+                                arr1[3] = action2;
+                                FKarrays.add(arr1);
+                                if (lookAhead.equals(";")) {
+                                    parseData.goPrev();
+                                    isFK = false;
+                                    break;
+                                } else
+                                    i++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+//        for (String[] s : FKarrays) {
+//            for (String s2: s) {
+//                System.out.println(s2);
+//
+//            }
+//        }
+        CoSQLCommand command = new CoSQLCreateTable(name, columns, pkColumn, FKarrays);
         parseData.addCommand(command);
     }
 
@@ -492,7 +591,7 @@ public class QueryParser {
 
         String rest() {
             StringBuilder sb = new StringBuilder();
-            for (int i=next; i<tokens.size(); i++) {
+            for (int i = next; i < tokens.size(); i++) {
                 sb.append(tokens.get(i));
                 if (i != tokens.size() - 1) {
                     sb.append(" ");
@@ -510,7 +609,7 @@ public class QueryParser {
         }
 
         void batchRun() throws CoSQLError {
-            for (CoSQLCommand command: commands) {
+            for (CoSQLCommand command : commands) {
                 command.execute(); // TODO batch run might get messed if something goes wrong in the middle, proper revert system needed
             }
         }
@@ -523,7 +622,7 @@ public class QueryParser {
         ArrayList<String> tokenize(String command) {
             String[] bySpace = command.split("\\s");
             ArrayList<String> res = new ArrayList<>();
-            for (String string: bySpace) {
+            for (String string : bySpace) {
                 StringTokenizer st = new StringTokenizer(string, "(),;", true);
             }
             return res;
