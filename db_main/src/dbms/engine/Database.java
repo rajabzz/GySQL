@@ -1,7 +1,10 @@
 package dbms.engine;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+
 
 /**
  * Created by blackvvine on 10/25/15.
@@ -27,4 +30,7 @@ public class Database implements Serializable {
         return tables.get(name);
     }
 
+    public void removeTable(Table table) {
+        tables.remove(table.tableName);
+    }
 }

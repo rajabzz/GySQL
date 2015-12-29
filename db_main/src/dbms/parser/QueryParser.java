@@ -17,11 +17,14 @@ import static dbms.util.LanguageUtils.throwParseError;
  */
 public class QueryParser {
 
-    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
+    public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_.\\$][a-zA-Z0-9_.\\$]*$"; //TODO CHECK GOOSALE
     public static final String REGEX_TABLE_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
     public static final String REGEX_DATABASE_NAME = "^[a-zA-Z\\$][a-zA-Z_\\$0-9]*$";
     public static final String REGEX_NUMERAL = "^[\\+\\-]?[0-9]+$";
     public static final String REGEX_INDEX_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
+
+    public static final int CART = 0;
+    public static final int JOIN = 1;
 
     private UserInterface userInterface;
     private ParseData parseData;
@@ -55,7 +58,7 @@ public class QueryParser {
                 create(parseData);
             } else if (next.equalsIgnoreCase("insert")) {
                 insert(parseData);
-            } else if (next.equalsIgnoreCase("update")) {
+            } else if (next.equalsIgnoreCase("update")){
                 update(parseData);
             } else if (next.equalsIgnoreCase("select")) {
                 select(parseData);
@@ -198,7 +201,9 @@ public class QueryParser {
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
         ArrayList<String> columnNames = new ArrayList<>();
+        ArrayList<String> tableNames = new ArrayList<>();
         String lookAhead;
+        int selectType = 0;
         while (!((lookAhead = parseData.next()).equalsIgnoreCase("from"))) {
             if (lookAhead.equals(","))
                 continue;
@@ -207,11 +212,19 @@ public class QueryParser {
 
             columnNames.add(lookAhead);
         }
+        //my changes
+        while (!((lookAhead = parseData.next()).equalsIgnoreCase("where"))) {
+            if (lookAhead.equals(",")) {
+                selectType = CART;
+                continue;
+            }
+            if (lookAhead.equalsIgnoreCase("join")) {
+                selectType = JOIN;
+                continue;
+            }
+            tableNames.add(lookAhead);
+        }
 
-        String tableName = tableName(parseData);
-
-        // force WHERE keyword
-        lookAhead = parseData.next();
         if (!lookAhead.equalsIgnoreCase("where"))
             throwParseError("Expected keyword WHERE before %s", lookAhead);
 
@@ -221,16 +234,21 @@ public class QueryParser {
             if (nextFullToken.isLiteral()) {
                 condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
             } else {
-                condition = condition.concat(nextFullToken.getValue());
+                String token = nextFullToken.getValue();
+                if (tableNames.size() == 1 && nextFullToken.getValue().contains(".")) {
+                    // remove table name in column name in conditions
+                    token = token.substring(token.indexOf(".") + 1);
+                }
+                condition = condition.concat(token);
             }
         }
         parseData.goPrev();
 
-        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
         CoSQLSelect selectQuery = new CoSQLSelect(
-                tableName,
+                tableNames,
                 columnNames,
-                tupleCondition
+                condition,
+                selectType
         );
         parseData.addCommand(selectQuery);
     }
@@ -609,7 +627,7 @@ public class QueryParser {
         }
 
         void batchRun() throws CoSQLError {
-            for (CoSQLCommand command : commands) {
+            for (CoSQLCommand command: commands) {
                 command.execute(); // TODO batch run might get messed if something goes wrong in the middle, proper revert system needed
             }
         }
@@ -622,7 +640,7 @@ public class QueryParser {
         ArrayList<String> tokenize(String command) {
             String[] bySpace = command.split("\\s");
             ArrayList<String> res = new ArrayList<>();
-            for (String string : bySpace) {
+            for (String string: bySpace) {
                 StringTokenizer st = new StringTokenizer(string, "(),;", true);
             }
             return res;

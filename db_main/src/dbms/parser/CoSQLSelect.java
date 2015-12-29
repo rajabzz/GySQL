@@ -10,18 +10,20 @@ import java.util.ArrayList;
  */
 public class CoSQLSelect extends CoSQLCommand{
 
-    String tableName;
+    ArrayList<String> tableNames;
     ArrayList<String> colNames;
-    TupleCondition tupleCondition;
+    String rawTupleCondition;
+    int type;
 
-    public CoSQLSelect(String tableName, ArrayList<String> colNames, TupleCondition tupleCondition) {
-        this.tableName = tableName;
+    public CoSQLSelect(ArrayList<String> tableName, ArrayList<String> colNames, String rawTupleCondition, int type) {
+        this.tableNames = tableName;
         this.colNames = colNames;
-        this.tupleCondition = tupleCondition;
+        this.rawTupleCondition = rawTupleCondition;
+        this.type = type;
     }
 
     @Override
     public void execute() throws CoSQLError {
-        DatabaseCore.select(tableName, colNames, tupleCondition);
+        DatabaseCore.select(tableNames, colNames, rawTupleCondition, type);
     }
 }
