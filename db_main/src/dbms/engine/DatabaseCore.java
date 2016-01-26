@@ -187,7 +187,7 @@ public class DatabaseCore {
 //            System.out.println("RECORD INSERTED");
 //        }
 
-         //  System.out.println(target);
+        //  System.out.println(target);
     }
 
     public static void createTable(String name, List<Table.Column> columns, String PK, ArrayList<String[]> FKDetails) throws CoSQLQueryExecutionError, CoSQLError {
@@ -241,10 +241,22 @@ public class DatabaseCore {
 
         // add the new table
         currentDatabase.addTable(newTable);
+        if (newTable.getPKcolumn() != null)
+            initialCreateIndex("PKIndex", newTable, newTable.getPKcolumn());
+        for (Table.Column fkCol: newTable.FKcolumns)
+            initialCreateIndex("FKIndex: " + fkCol.getName(), newTable, fkCol);
 
         // user feedback
         String message = "TABLE CREATED";
         System.out.println(message);
+    }
+
+    private static void initialCreateIndex(String indexName, Table table, Table.Column column) {
+
+        // instantiate new index and add to table
+        Table.Index index = new Table.Index(indexName, column);
+        table.addIndex(index);
+
     }
 
     public static void createIndex(String indexName, String tableName, String columnName) throws CoSQLQueryExecutionError {
@@ -265,6 +277,13 @@ public class DatabaseCore {
                     tableName
             );
             throw new CoSQLQueryExecutionError(err);
+        }
+
+        if ((table.getPKcolumn() != null && table.getPKcolumn().equals(column)) || table.FKcolumns.contains(column)) {
+            table.indexes.get(column).name = indexName;
+            String message = "INDEX CREATED";
+            System.out.println(message);
+            return;
         }
 
         Table.Index index = table.indexes.get(column);
@@ -401,7 +420,7 @@ public class DatabaseCore {
 
         }
 
-      //  System.out.println(table);
+        //  System.out.println(table);
     }
 
 
@@ -471,15 +490,70 @@ public class DatabaseCore {
     }
 
     private static ArrayList<TR> deletedNodes = new ArrayList<>();
-    private static boolean rest = false;
 
     private static void deleteARow(Table.Row r, Table t) {
+        Object obj = r.getValueAt(t.getColumnIndex(t.getPKcolumn()));
+
+        for (Table l : t.listener) {
+            int i;
+            for (i = 0; i < l.tableReference.size(); i++) {
+                if (l.tableReference.get(i).equals(t)) {
+                    break;
+                }
+            }
+
+            int relatedFKIndex = l.getColumnIndex(l.FKcolumns.get(i));
+            boolean relatedRestrict = (l.onDelete.get(i).equals("restrict")) ? true : false;
+
+            for (Table.Row row : l.getContents()) {
+                if (row.getValueAt(relatedFKIndex).equals(obj)) {
+                    deleteARow(row, l);
+                }
+            }
+
+        }
+        deletedNodes.add(new TR(t, r));
+
+//        if (t.listener.isEmpty()) {
+//            deletedNodes.add(new TR(t, r));
+//        } else {
+//
+//            Object obj = r.getValueAt(t.getColumnIndex(t.getPKcolumn()));
+//            rest = false;
+//            for (Table l : t.listener) {
+//                int i;
+//                for (i = 0; i < l.tableReference.size(); i++) {
+//                    if (l.tableReference.get(i).equals(t)) {
+//                        break;
+//                    }
+//                }
+//
+//                int relatedFKIndex = l.getColumnIndex(l.FKcolumns.get(i));
+//                boolean relatedRestrict = (l.onDelete.get(i).equals("restrict")) ? true : false;
+//
+//                for (Table.Row row : l.getContents()) {
+//                    if (row.getValueAt(relatedFKIndex).equals(obj)) {
+//                        if (relatedRestrict) {
+//                            rest = true;
+//                            System.out.println(rest+l.getName());
+//                            return;
+//                        } else {
+//                            deleteARow(row, l);
+//                        }
+//                    }
+//
+//                }
+//            }
+//            if (!rest)
+//                deletedNodes.add(new TR(t, r));
+//        }
+    }
+
+    private static boolean restrictDFS(Table.Row r, Table t) {
         if (t.listener.isEmpty()) {
-            deletedNodes.add(new TR(t, r));
+            return false;
         } else {
-
             Object obj = r.getValueAt(t.getColumnIndex(t.getPKcolumn()));
-
             for (Table l : t.listener) {
                 int i;
                 for (i = 0; i < l.tableReference.size(); i++) {
@@ -494,21 +568,17 @@ public class DatabaseCore {
                 for (Table.Row row : l.getContents()) {
                     if (row.getValueAt(relatedFKIndex).equals(obj)) {
                         if (relatedRestrict) {
-                            rest = true;
-                            return;
-                        } else {
-                            deleteARow(row, l);
+                            return true;
+                        } else if (restrictDFS(row, l)) {
+                            return true;
                         }
                     }
 
                 }
             }
-            if (!rest)
-                deletedNodes.add(new TR(t, r));
+            return false;
         }
-
     }
-
 
     public static void delete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) throws CoSQLQueryExecutionError {
         Table table = currentDatabase.getTable(tableName);
@@ -517,20 +587,19 @@ public class DatabaseCore {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        // Object obj = null;
         for (Table.Row row : new ArrayList<Table.Row>(contentsMustBeDelete)) {
-            deleteARow(row, table);
-            if (deletedNodes.isEmpty())
-                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
-            else {
+            if (!restrictDFS(row, table)) {
+                deleteARow(row, table);
                 for (TR d : deletedNodes) {
                     d.table.removeRow(d.row);
                     d.table.updateIndexForDelete(d.row);
                 }
                 deletedNodes.clear();
+            } else {
+                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
+                break;
             }
         }
-       // System.out.println(table);
     }
 
     public static void select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
@@ -575,8 +644,17 @@ public class DatabaseCore {
             return;
         }
         Table table2 = currentDatabase.getTable(tableNames.get(1));
+        Table resultTable;
+        if (type == QueryParser.JOIN) {
+            if (table1.tableReference.contains(table2))
+                resultTable = table1.join(table2);
+            else if (table2.tableReference.contains(table1))
+                resultTable = table2.join(table1);
+            else
+                throw new CoSQLQueryExecutionError("Not such tables can be joint");
 
-        Table resultTable = (type == QueryParser.JOIN ? table1.join(table2) : table1.cartesianProduct(table2));
+        } else
+            resultTable = table1.cartesianProduct(table2);
         currentDatabase.addTable(resultTable);
         select(resultTable, colNames, rawTupleCondition);
         currentDatabase.removeTable(resultTable);

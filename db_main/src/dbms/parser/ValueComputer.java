@@ -66,7 +66,7 @@ public class ValueComputer {
 
             if (!delimiters.contains(token.getValue())
                     && !token.isLiteral()
-                    && token.getValue().matches("^\\d+$"))
+                    && !token.getValue().matches("^\\d+$"))
                 hasField = true;
         }
 

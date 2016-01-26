@@ -336,7 +336,7 @@ public class Table implements Serializable {
     public String toString() {
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < columns.size(); i++) {
-            result.append(columns.get(i).name);
+            result.append((columns.get(i).getName()).substring(columns.get(i).getName().indexOf(".") + 1) );
             if (i != columns.size() - 1) {
                 result.append(",");
             }
@@ -482,13 +482,13 @@ public class Table implements Serializable {
             resCol.add(new Column(fullColName, c.type));
         }
         result.addAllColumns(resCol);
-
-        int fkIndex = fkIndices.get(refTables.indexOf(other));
+        int fkIndex = this.getColumnIndex(FKcolumns.get(tableReference.indexOf(other)));
         for (Row r : contents) {
             ArrayList<Object> vals = new ArrayList<>();
             vals.addAll(r.getValues());
             Object key = r.getValueAt(fkIndex);
-            Index idx = other.indexes.get(this.getColumnAt(pkIndex));
+            Column fafaf = getPKcolumn();
+            Index idx = other.indexes.get(fafaf);
             HashSet<Table.Row> indexedResult = idx.index.get(key);
             ArrayList<Table.Row> resultRows = new ArrayList<>();
             if (indexedResult == null)
