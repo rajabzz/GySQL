@@ -3,16 +3,19 @@ package dbms.engine;
 import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.exceptions.CoSQLQueryParseError;
-import dbms.parser.ComputeValue;
+import dbms.parser.GroupByData;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
 import dbms.parser.TupleCondition;
 import dbms.parser.ValueComputer;
+import dbms.util.GroupHashMap;
 
-import javax.management.Query;
 import java.util.*;
 
 import static dbms.util.LanguageUtils.throwExecError;
+
+import static dbms.engine.Table.Row;
+import static dbms.engine.Table.Column;
 
 public class DatabaseCore {
 
@@ -602,17 +605,18 @@ public class DatabaseCore {
         }
     }
 
-    public static void select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
+    public static Table select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
         // checking if table exists
         Table table = currentDatabase.getTable(tableName);
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        select(table, colNames, rawTupleCondition);
+        return select(table, colNames, rawTupleCondition);
     }
 
-    public static void select(Table table, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
+    public static Table select(Table table, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
+
         // get contents of tuple condition
         TupleCondition tupleCondition = new TupleCondition(rawTupleCondition, table.tableName);
         List<Table.Row> contents = tupleCondition.getContents();
@@ -623,6 +627,7 @@ public class DatabaseCore {
             colIndexes.add(table.getColumnIndex(colName));
             columns.add(table.getColumn(colName));
         }
+
         ArrayList<Table.Row> finalContents = new ArrayList<>();
         for (Table.Row row : contents) {
             ArrayList<Object> values = new ArrayList<>();
@@ -631,18 +636,18 @@ public class DatabaseCore {
             }
             finalContents.add(new Table.Row(values));
         }
-        //TODO add "    no result"
-        Table finalTable = new Table("printable", columns, finalContents);
-        System.out.println(finalTable);
+
+        return new Table("printable", columns, finalContents);
+
     }
 
+    public static Table select(ArrayList<String> tableNames, ArrayList<String> colNames, String rawTupleCondition, int type, GroupByData groupBy) throws CoSQLError {
 
-    public static void select(ArrayList<String> tableNames, ArrayList<String> colNames, String rawTupleCondition, int type) throws CoSQLError {
         Table table1 = currentDatabase.getTable(tableNames.get(0));
         if (tableNames.size() == 1) {
-            select(table1, colNames, rawTupleCondition);
-            return;
+            return select(table1, colNames, rawTupleCondition);
         }
+
         Table table2 = currentDatabase.getTable(tableNames.get(1));
         Table resultTable;
         if (type == QueryParser.JOIN) {
@@ -655,9 +660,55 @@ public class DatabaseCore {
 
         } else
             resultTable = table1.cartesianProduct(table2);
+
         currentDatabase.addTable(resultTable);
-        select(resultTable, colNames, rawTupleCondition);
-        currentDatabase.removeTable(resultTable);
+
+        Table res = select(resultTable, colNames, rawTupleCondition);
+
+        currentDatabase.removeTable(resultTable); // TODO move this to table destructor
+
+        return res;
+
+    }
+
+    public static Table groupTable(Table table, GroupByData groupBy) throws CoSQLQueryExecutionError {
+
+        // resolve columns
+        List<Table.Column> groupColumns = new ArrayList<>();
+        List<Integer> groupColumnsPositions = new ArrayList<>();
+        for (String colName: groupBy.getColumns()) {
+            try {
+                Column col = table.getColumn(colName);
+                groupColumns.add(col);
+                groupColumnsPositions.add(table.getColumnIndex(col));
+            } catch (CoSQLError coSQLError) {
+                coSQLError.printStackTrace();
+                throw new CoSQLQueryExecutionError("Cannot resolve column name: " + colName);
+            }
+        }
+
+        Table res = new Table("GROUP_RESULT", table.columns, new ArrayList<Row>());
+
+        GroupHashMap<List<Object>, Row> map = new GroupHashMap<>();
+
+        // iterate table rows
+        for (Row row: table.getRows()) {
+
+            // make a tuple of group columns' values
+            List<Object> valuesTuple = new ArrayList<>();
+            for (Integer idx : groupColumnsPositions) {
+                // iterates through the group columns and adds
+                // their values in rows to the tuple
+                valuesTuple.add(row.getValueAt(idx));
+            }
+
+            map.add(valuesTuple, row);
+
+        }
+
+        // TODO @Urgent fill
+
+        return res;
     }
 
     private static boolean objectEquals(Object o1, Object o2) {

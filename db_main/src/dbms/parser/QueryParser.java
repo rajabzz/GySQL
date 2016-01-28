@@ -198,8 +198,14 @@ public class QueryParser {
         parseData.addCommand(updateQuery);
     }
 
+    private SelectValue selectValue() throws CoSQLQueryParseError {
+
+
+
+    }
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
+
         ArrayList<String> columnNames = new ArrayList<>();
         ArrayList<String> tableNames = new ArrayList<>();
         String lookAhead;
@@ -212,7 +218,7 @@ public class QueryParser {
 
             columnNames.add(lookAhead);
         }
-        //my changes
+
         while (!((lookAhead = parseData.next()).equalsIgnoreCase("where"))) {
             if (lookAhead.equals(",")) {
                 selectType = CART;
@@ -244,13 +250,78 @@ public class QueryParser {
         }
         parseData.goPrev();
 
+        GroupByData groupByData = null;
+        if (parseData.peek().getValue().equalsIgnoreCase("group")) {
+            groupByData = groupBy();
+        }
+
         CoSQLSelect selectQuery = new CoSQLSelect(
                 tableNames,
                 columnNames,
                 condition,
-                selectType
+                selectType,
+                groupByData
         );
+
         parseData.addCommand(selectQuery);
+
+    }
+
+    private GroupByData groupBy() throws CoSQLQueryParseError {
+
+        match("group");
+
+        match("by");
+
+        ArrayList<String> columnNames = new ArrayList<>();
+
+        columnNames.add(columnName(parseData));
+
+        while (parseData.peekAhead(",")) {
+            match(",");
+            columnNames.add(columnName(parseData));
+        }
+
+        HavingCondition having = null;
+
+        if (parseData.peekAhead("having")) {
+            having = having();
+        }
+
+        return new GroupByData(columnNames, having);
+
+    }
+
+    private HavingCondition having() throws CoSQLQueryParseError {
+
+        match("having");
+
+        // get and parse the aggregate method
+        String methodText = parseData.next();
+        GroupByData.Method method = GroupByData.Method.fromText(methodText);
+        if (method == null) {
+            throw new CoSQLQueryParseError("Unknown aggregation function: " + methodText);
+        }
+
+        match("(");
+
+        // get column name
+        String column = columnName(parseData);
+
+        match(")");
+
+        // get and parse theta operator
+        String operatorText = parseData.next();
+        HavingCondition.ThetaOperator operator = HavingCondition.ThetaOperator.fromText(operatorText);
+        if (operator == null) {
+            throw new CoSQLQueryParseError("Unknown theta operation: " + operatorText);
+        }
+
+        // get and parse the comparative value
+        LexicalToken value = parseData.nextFullToken();
+
+        return new HavingCondition(method, column, operator, value);
+
     }
 
     private void delete(ParseData parseData) throws CoSQLQueryParseError {
@@ -601,6 +672,10 @@ public class QueryParser {
 
         LexicalToken peek() {
             return tokens.get(next);
+        }
+
+        boolean peekAhead(String text) {
+            return tokens.get(next).getValue().equalsIgnoreCase(text);
         }
 
         boolean hasNext() {
