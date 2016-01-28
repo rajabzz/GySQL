@@ -235,8 +235,8 @@ public class Table implements Serializable {
 
         for (Index index: indexes.values()) {
             indexRow(newRow, index);
-
         }
+
     }
 
     void indexRow(Row row, Index index) {
@@ -505,4 +505,9 @@ public class Table implements Serializable {
         return result;
     }
 
+    @Override
+    protected void finalize() throws Throwable {
+        super.finalize();
+        DatabaseCore.currentDatabase.removeTable(this);
+    }
 }

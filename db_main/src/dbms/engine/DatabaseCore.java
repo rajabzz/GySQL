@@ -6,6 +6,7 @@ import dbms.exceptions.CoSQLQueryParseError;
 import dbms.parser.GroupByData;
 import dbms.parser.LexicalToken;
 import dbms.parser.QueryParser;
+import dbms.parser.SelectValue;
 import dbms.parser.TupleCondition;
 import dbms.parser.ValueComputer;
 import dbms.util.GroupHashMap;
@@ -16,6 +17,7 @@ import static dbms.util.LanguageUtils.throwExecError;
 
 import static dbms.engine.Table.Row;
 import static dbms.engine.Table.Column;
+import static dbms.parser.GroupByData.Method;
 
 public class DatabaseCore {
 
@@ -29,6 +31,10 @@ public class DatabaseCore {
 
     public static Database defaultDatabase;
     public static Database currentDatabase;
+
+    public static Database getCurrentDatabase() {
+        return currentDatabase;
+    }
 
     static void init() {
 
@@ -605,47 +611,99 @@ public class DatabaseCore {
         }
     }
 
-    public static Table select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
-        // checking if table exists
-        Table table = currentDatabase.getTable(tableName);
-        if (table == null) {
-            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+//    @Deprecated
+//    public static Table select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
+//        // checking if table exists
+//        Table table = currentDatabase.getTable(tableName);
+//        if (table == null) {
+//            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+//        }
+//
+//        return select(table, colNames, rawTupleCondition);
+//    }
+
+    private static class GeneralSelectResult {
+
+        Table finalResult;
+        List<Row> sigmaList;
+        Map<Row, Row> sigmaMap;
+
+        public GeneralSelectResult(Table finalResult, List<Row> sigmaList, Map<Row, Row> sigmaMap) {
+            this.finalResult = finalResult;
+            this.sigmaList = sigmaList;
+            this.sigmaMap = sigmaMap;
         }
 
-        return select(table, colNames, rawTupleCondition);
     }
 
-    public static Table select(Table table, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
+    public static GeneralSelectResult select(Table table, ArrayList<SelectValue> selectValues, String rawTupleCondition) throws CoSQLError {
 
         // get contents of tuple condition
+        Map<Row, Row> sigmaMap = new HashMap<>();
         TupleCondition tupleCondition = new TupleCondition(rawTupleCondition, table.tableName);
         List<Table.Row> contents = tupleCondition.getContents();
 
         ArrayList<Integer> colIndexes = new ArrayList<>();
         ArrayList<Table.Column> columns = new ArrayList<>();
-        for (String colName : colNames) {
-            colIndexes.add(table.getColumnIndex(colName));
-            columns.add(table.getColumn(colName));
+
+        // create header for new table (the table to be returned)
+        for (SelectValue sv: selectValues) {
+
+            if (sv.getType() == SelectValue.Type.COLUMN_NAME) {
+
+                String colName = sv.getTargetColumn();
+                colIndexes.add(table.getColumnIndex(colName));
+                columns.add(table.getColumn(colName));
+
+            } else {
+
+                // check column name and type OK
+                Column target = table.getColumn(sv.getTargetColumn());
+                if (target.getType() != Table.ColumnType.INT)
+                    throw new CoSQLError("Aggregation function " + sv.getAggregateMethod().getText() + " only allowed for INT columns.");
+
+                String colName = sv.getAggregateMethod().getText() + "~"  + sv.getTargetColumn();
+                colIndexes.add(-1);
+                columns.add(new Column(colName, Table.ColumnType.INT));
+            }
         }
 
         ArrayList<Table.Row> finalContents = new ArrayList<>();
         for (Table.Row row : contents) {
             ArrayList<Object> values = new ArrayList<>();
             for (Integer i : colIndexes) {
-                values.add(row.getValueAt(i));
+                if (i != -1)
+                    values.add(row.getValueAt(i));
+                else
+                    values.add(null);
             }
-            finalContents.add(new Table.Row(values));
+            Row sigmaFiltered = new Table.Row(values);
+            finalContents.add(sigmaFiltered);
+            sigmaMap.put(sigmaFiltered, row);
         }
 
-        return new Table("printable", columns, finalContents);
+        Table res = new Table("printable", columns, finalContents);
+
+        return new GeneralSelectResult(res, contents, sigmaMap);
 
     }
 
-    public static Table select(ArrayList<String> tableNames, ArrayList<String> colNames, String rawTupleCondition, int type, GroupByData groupBy) throws CoSQLError {
+    public static Table select(ArrayList<String> tableNames, ArrayList<SelectValue> selectValues, String rawTupleCondition, int type, GroupByData groupBy) throws CoSQLError {
 
         Table table1 = currentDatabase.getTable(tableNames.get(0));
+
+        // if query doesn't have joins or Cartesian multiplication
         if (tableNames.size() == 1) {
-            return select(table1, colNames, rawTupleCondition);
+
+            // select both rows and columns
+            GeneralSelectResult selected = select(table1, selectValues, rawTupleCondition);
+
+            // affect group by statement
+            if (groupBy != null)
+                return groupTable(selected.finalResult, groupBy, table1, selected.sigmaMap);
+            else
+                return selected.finalResult;
+
         }
 
         Table table2 = currentDatabase.getTable(tableNames.get(1));
@@ -663,36 +721,42 @@ public class DatabaseCore {
 
         currentDatabase.addTable(resultTable);
 
-        Table res = select(resultTable, colNames, rawTupleCondition);
+        // check selected columns are in group by, if it's a group query
+        if (groupBy != null)
+            for (SelectValue sv: selectValues) {
+                if (sv.getType() == SelectValue.Type.COLUMN_NAME) {
+                    if (!groupBy.getColumns().contains(sv.getTargetColumn())) {
+                        throw new CoSQLError("Only aggregate functions and group columns allowed.");
+                    }
+                }
+            }
 
-        currentDatabase.removeTable(resultTable); // TODO move this to table destructor
-
-        return res;
+        return select(resultTable, selectValues, rawTupleCondition).finalResult; // TODO TOFF :: bara zarb carthesian kaar nemikone :| think of something
 
     }
 
-    public static Table groupTable(Table table, GroupByData groupBy) throws CoSQLQueryExecutionError {
+    public static Table groupTable(Table selectTable, GroupByData groupBy, Table sourceTable, Map<Row, Row> sigmaMap) throws CoSQLQueryExecutionError {
 
         // resolve columns
         List<Table.Column> groupColumns = new ArrayList<>();
         List<Integer> groupColumnsPositions = new ArrayList<>();
         for (String colName: groupBy.getColumns()) {
             try {
-                Column col = table.getColumn(colName);
+                Column col = selectTable.getColumn(colName);
                 groupColumns.add(col);
-                groupColumnsPositions.add(table.getColumnIndex(col));
+                groupColumnsPositions.add(selectTable.getColumnIndex(col));
             } catch (CoSQLError coSQLError) {
                 coSQLError.printStackTrace();
                 throw new CoSQLQueryExecutionError("Cannot resolve column name: " + colName);
             }
         }
 
-        Table res = new Table("GROUP_RESULT", table.columns, new ArrayList<Row>());
+        Table res = new Table("GROUP_RESULT", selectTable.columns, new ArrayList<Row>());
 
         GroupHashMap<List<Object>, Row> map = new GroupHashMap<>();
 
         // iterate table rows
-        for (Row row: table.getRows()) {
+        for (Row row: selectTable.getRows()) {
 
             // make a tuple of group columns' values
             List<Object> valuesTuple = new ArrayList<>();
@@ -706,7 +770,109 @@ public class DatabaseCore {
 
         }
 
-        // TODO @Urgent fill
+        for (List<Object> groupUniqueVal: map.keySet()) {
+
+            Row firstRow = map.get(groupUniqueVal).get(0);
+            int colsCount = selectTable.getColumns().size();
+
+            List<Object> valuesTuple = new ArrayList<>(selectTable.getColumns().size());
+
+            for (int i=0; i<colsCount; i++) {
+
+                Column column = selectTable.getColumnAt(i);
+
+                if (column.getName().contains("~")) {
+
+                    String[] explode = column.getName().split("~");
+                    Method method = Method.fromText(explode[0]);
+
+                    if (method == null) {
+                        throw new CoSQLQueryExecutionError("No such aggregation function: " + method);
+                    }
+
+                    int targetIndex;
+
+                    try {
+                        targetIndex = sourceTable.getColumnIndex(explode[1]);
+                    } catch (CoSQLError coSQLError) {
+                        throw new CoSQLQueryExecutionError("Unknown column " + explode[1] + " used in aggregation function: " + explode[0]);
+                    }
+
+                    Object columnValue = null;
+
+                    switch (method) {
+
+                        case AVG: {
+
+                            long sum = 0;
+                            int count = 0;
+
+                            for (Row row: map.get(groupUniqueVal)) {
+                                Row corresponding = sigmaMap.get(row);
+                                long value = (long) corresponding.getValueAt(targetIndex);
+                                sum += value;
+                                count += 1;
+                            }
+
+                            columnValue = sum / (double)count;
+                            break;
+                        }
+
+                        case SUM: {
+
+                            long sum = 0;
+
+                            for (Row row: map.get(groupUniqueVal)) {
+                                Row corresponding = sigmaMap.get(row);
+                                long value = (long) corresponding.getValueAt(targetIndex);
+                                sum += value;
+                            }
+
+                            columnValue = sum;
+                            break;
+                        }
+
+                        case MAX: {
+
+                            long max = Long.MIN_VALUE;
+
+                            for (Row row: map.get(groupUniqueVal)) {
+                                Row corresponding = sigmaMap.get(row);
+                                long value = (long) corresponding.getValueAt(targetIndex);
+                                max = Math.max(value, max);
+                            }
+
+                            columnValue = max;
+                            break;
+                        }
+
+                        case MIM: {
+
+                            long min = Long.MAX_VALUE;
+
+                            for (Row row: map.get(groupUniqueVal)) {
+                                Row corresponding = sigmaMap.get(row);
+                                long value = (long) corresponding.getValueAt(targetIndex);
+                                min = Math.min(value, min);
+                            }
+
+                            columnValue = min;
+                            break;
+                        }
+
+                    } // end switch
+
+                    valuesTuple.add(columnValue);
+
+                } else {
+
+                    valuesTuple.add(firstRow.getValueAt(i));
+
+                }
+
+            }
+
+        }
 
         return res;
     }

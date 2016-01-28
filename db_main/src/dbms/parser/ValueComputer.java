@@ -178,17 +178,13 @@ public class ValueComputer {
 
     public static ParsedTuple computeFieldBased(String rawInput, Table table) throws CoSQLQueryParseError {
 
-        // TODO test
-
-//        System.out.println(">>>>> " + rawInput);
-
         List<LexicalToken> tokens = StringUtils.tokenizeQuery(rawInput);
         List<ValueWrapper> wrapperList = new ArrayList<>();
 
         for (LexicalToken token : tokens) {
-//            System.out.println(">>>>> token >> " + token);
+
             if (isColumnName(token)) {
-                // if ought to be a column name
+
                 String colName = token.getValue();
                 try {
                     int colIndex = table.getColumnIndex(colName);
@@ -198,8 +194,9 @@ public class ValueComputer {
                 }
 
             } else {
-                // if constant value
+
                 wrapperList.add(new ValueWrapper(token));
+
             }
         }
 

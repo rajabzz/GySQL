@@ -33,13 +33,25 @@ public class GroupByData {
             this.text = text;
         }
 
-        static Method fromText(String text) {
+        public String getText() {
+            return text;
+        }
+
+        public static Method fromText(String text) {
             for (Method m: Method.values()) {
                 if (m.text.equalsIgnoreCase(text)) {
                     return m;
                 }
             }
             return null;
+        }
+
+        public static boolean isAggregateFunction(String text) {
+            for (Method m: Method.values()) {
+                if (m.text.equalsIgnoreCase(text))
+                    return true;
+            }
+            return false;
         }
 
     }

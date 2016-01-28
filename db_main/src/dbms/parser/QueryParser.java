@@ -200,24 +200,46 @@ public class QueryParser {
 
     private SelectValue selectValue() throws CoSQLQueryParseError {
 
+        // check if we're facing an aggregation function
+        String lookAhead = parseData.peek().value;
+        if (GroupByData.Method.isAggregateFunction(lookAhead)) {
 
+            // parse aggregate method type
+            String methodText = parseData.next();
+            GroupByData.Method method = GroupByData.Method.fromText(methodText);
+
+            match("(");
+
+            // get column name
+            String column = columnName(parseData);
+
+            match(")");
+
+            return SelectValue.fromAggregateFunction(method, column);
+
+        }
+
+        // if not, parse a normal column name
+        return SelectValue.fromIndividualColumn(columnName(parseData));
 
     }
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
 
-        ArrayList<String> columnNames = new ArrayList<>();
         ArrayList<String> tableNames = new ArrayList<>();
+        ArrayList<SelectValue> selectValues = new ArrayList<>();
+
         String lookAhead;
         int selectType = 0;
-        while (!((lookAhead = parseData.next()).equalsIgnoreCase("from"))) {
-            if (lookAhead.equals(","))
-                continue;
-            if (lookAhead.equals(";"))
-                throw new CoSQLQueryParseError();
 
-            columnNames.add(lookAhead);
+        // get select values (column names, aggregate functions, blah blah)
+        selectValues.add(selectValue());
+        while (parseData.peekAhead(",")) {
+            match(",");
+            selectValues.add(selectValue());
         }
+
+        match("from");
 
         while (!((lookAhead = parseData.next()).equalsIgnoreCase("where"))) {
             if (lookAhead.equals(",")) {
@@ -257,7 +279,7 @@ public class QueryParser {
 
         CoSQLSelect selectQuery = new CoSQLSelect(
                 tableNames,
-                columnNames,
+                selectValues,
                 condition,
                 selectType,
                 groupByData

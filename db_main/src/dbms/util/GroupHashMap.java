@@ -10,20 +10,18 @@ import java.util.Map;
  * the values are the table are a list of K objects
  * which get created upon first add with a certain key
  */
-public class GroupHashMap<T, K> {
-
-    Map<T, List<K>> table = new HashMap<>();
+public class GroupHashMap<T, K> extends HashMap<T, List<K>> {
 
     public void add(T key, K value) {
 
-        List<K> valList = table.get(key);
+        List<K> valList = this.get(key);
 
         if (valList != null) {
             valList.add(value);
         } else {
             valList = new ArrayList<>();
             valList.add(value);
-            table.put(key, valList);
+            this.put(key, valList);
         }
 
     }

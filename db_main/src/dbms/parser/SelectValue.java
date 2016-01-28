@@ -7,7 +7,7 @@ import dbms.engine.Table;
  */
 public class SelectValue {
 
-    enum Type {
+    public enum Type {
         COLUMN_NAME, AGGREGATE_FUNCTION
     }
 
@@ -17,14 +17,14 @@ public class SelectValue {
 
     GroupByData.Method aggregateMethod;
 
-    public static SelectValue forIndividualColumn(String columnName) {
+    public static SelectValue fromIndividualColumn(String columnName) {
         SelectValue res = new SelectValue();
         res.type = Type.COLUMN_NAME;
         res.targetColumn = columnName;
         return res;
     }
 
-    public static SelectValue forGroupFunction(GroupByData.Method method, String colName) {
+    public static SelectValue fromAggregateFunction(GroupByData.Method method, String colName) {
         SelectValue res = new SelectValue();
         res.type = Type.COLUMN_NAME;
         res.targetColumn = colName;
@@ -32,4 +32,15 @@ public class SelectValue {
         return res;
     }
 
+    public Type getType() {
+        return type;
+    }
+
+    public String getTargetColumn() {
+        return targetColumn;
+    }
+
+    public GroupByData.Method getAggregateMethod() {
+        return aggregateMethod;
+    }
 }

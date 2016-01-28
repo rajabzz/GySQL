@@ -12,21 +12,21 @@ import java.util.ArrayList;
 public class CoSQLSelect extends CoSQLCommand{
 
     ArrayList<String> tableNames;
-    ArrayList<String> colNames;
+    ArrayList<SelectValue> selectValues;
     String rawTupleCondition;
     int type;
     GroupByData groupBy;
 
-    public CoSQLSelect(ArrayList<String> tableName, ArrayList<String> colNames, String rawTupleCondition, int type) {
+    public CoSQLSelect(ArrayList<String> tableName, ArrayList<SelectValue> selectValues, String rawTupleCondition, int type) {
         this.tableNames = tableName;
-        this.colNames = colNames;
+        this.selectValues = selectValues;
         this.rawTupleCondition = rawTupleCondition;
         this.type = type;
     }
 
-    public CoSQLSelect(ArrayList<String> tableNames, ArrayList<String> colNames, String rawTupleCondition, int type, GroupByData groupBy) {
+    public CoSQLSelect(ArrayList<String> tableNames, ArrayList<SelectValue> selectValues, String rawTupleCondition, int type, GroupByData groupBy) {
         this.tableNames = tableNames;
-        this.colNames = colNames;
+        this.selectValues = selectValues;
         this.rawTupleCondition = rawTupleCondition;
         this.type = type;
         this.groupBy = groupBy;
@@ -34,7 +34,7 @@ public class CoSQLSelect extends CoSQLCommand{
 
     @Override
     public void execute() throws CoSQLError {
-        Table res = DatabaseCore.select(tableNames, colNames, rawTupleCondition, type, groupBy);
+        Table res = DatabaseCore.select(tableNames, selectValues, rawTupleCondition, type, groupBy);
         System.out.println(res);
     }
 
