@@ -26,7 +26,7 @@ public class SelectValue {
 
     public static SelectValue fromAggregateFunction(GroupByData.Method method, String colName) {
         SelectValue res = new SelectValue();
-        res.type = Type.COLUMN_NAME;
+        res.type = Type.AGGREGATE_FUNCTION;
         res.targetColumn = colName;
         res.aggregateMethod = method;
         return res;

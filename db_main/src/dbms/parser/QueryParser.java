@@ -52,6 +52,9 @@ public class QueryParser {
 
     private void start(ParseData parseData) throws CoSQLError {
 
+        if (!parseData.hasNext())
+            return;
+
         try {
 
             String next = parseData.next();
@@ -200,6 +203,19 @@ public class QueryParser {
     }
 
     private SelectValue selectValue() throws CoSQLQueryParseError {
+
+        String[] aggregateFunctions = new String[]{"MAX", "MIN", "SUM", "AVG"};
+
+        for (String agg: aggregateFunctions)
+            if (agg.equalsIgnoreCase(parseData.peek().getValue())) {
+
+                String func = parseData.next();
+                match("(");
+                String column = columnName(parseData);
+                match(")");
+
+                return SelectValue.fromAggregateFunction(GroupByData.Method.fromText(func), column);
+            }
 
         // if not, parse a normal column name
         return SelectValue.fromIndividualColumn(columnName(parseData));
