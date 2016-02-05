@@ -131,6 +131,8 @@ public class Table implements Serializable {
 
     /* table FKs */
     ArrayList<Column> FKcolumns = new ArrayList<>();
+    /* view PKs */
+    ArrayList<Column> PKcolumns = new ArrayList<>();
 
     /* tables that fks are referenced of */
     ArrayList<Table> tableReference = new ArrayList<>();
@@ -146,12 +148,15 @@ public class Table implements Serializable {
     /* indexes */
     HashMap<Column, Index> indexes;
 
+    /* VIEW STUFF */
+  //  boolean isPazira = true;
+    boolean isView = false;
+
     /* default constructor */
     public Table(String name) {
         this.tableName = name;
         this.columns = new ArrayList<>();
         this.contents = new ArrayList<>();
-        this.indexes = new HashMap<>();
     }
 
     public Table(String tableName, ArrayList<Column> columns, ArrayList<Row> contents) {
@@ -160,12 +165,20 @@ public class Table implements Serializable {
         this.contents = contents;
     }
 
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
     public String getName() {
         return tableName;
     }
 
     public void setPKcolumn(String pkName) throws CoSQLError {
         pk = getColumn(pkName);
+        PKcolumns.add(pk);
+    }
+
+    public void initIndex() {
+        indexes = new HashMap<>();
     }
 
     public Column getPKcolumn() {
@@ -233,8 +246,10 @@ public class Table implements Serializable {
         Row newRow = new Row(args);
         this.contents.add(newRow);
 
-        for (Index index: indexes.values()) {
-            indexRow(newRow, index);
+        if (indexes != null) {
+            for (Index index : indexes.values()) {
+                indexRow(newRow, index);
+            }
         }
 
     }
@@ -296,28 +311,26 @@ public class Table implements Serializable {
         indexes.put(index.column, index);
     }
 
-    public void updateIndexAt(int colIndex, int rowIndex) {
+    public void updateIndexAt(int colIndex, int rowIndex, Object oldValue) {
 
         Column column = getColumnAt(colIndex);
         Row row = getRowAt(rowIndex);
-        Object value = row.getValueAt(colIndex);
+        Object newValue = row.getValueAt(colIndex);
 
         Index idx = indexes.get(column);
 
         if (idx == null) {
             return;
         }
-
-        HashSet<Row> vals = idx.index.get(value);
-        vals.remove(row);
-
-        indexRow(row, idx);
+        HashSet<Row> vals = idx.index.get(oldValue);
+        idx.index.remove(oldValue);
+        idx.index.put(newValue, vals);
     }
+
 
     public void updateIndexForDelete(Row row) {
 
         //Index idx = indexes.get(getColumnAt(colIndex));
-
         for (Index idx : indexes.values()) {
 
             int colIndex = getColumnIndex(idx.column);

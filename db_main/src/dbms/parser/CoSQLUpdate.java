@@ -13,17 +13,17 @@ public class CoSQLUpdate extends CoSQLCommand {
     String tableName;
     String colName;
     String rawComputeValue;
-    ArrayList<Table.Row> contents;
+    String condition;
 
-    public CoSQLUpdate(String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) {
+    public CoSQLUpdate(String tableName, String colName, String rawComputeValue, String condition) {
         this.tableName = tableName;
         this.colName = colName;
         this.rawComputeValue = rawComputeValue;
-        this.contents = contents;
+        this.condition = condition;
     }
 
     @Override
     public void execute() throws CoSQLError {
-        DatabaseCore.update(tableName, colName, rawComputeValue, contents);
+        DatabaseCore.update(tableName, colName, rawComputeValue, condition);
     }
 }

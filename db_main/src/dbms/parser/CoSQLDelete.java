@@ -12,15 +12,15 @@ import java.util.ArrayList;
 public class CoSQLDelete extends CoSQLCommand {
 
     String tableName;
-    ArrayList<Table.Row> contentsMustBeDelete;
+    String condition;
 
-    public CoSQLDelete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) {
+    public CoSQLDelete(String tableName, String condition) {
         this.tableName = tableName;
-        this.contentsMustBeDelete = contentsMustBeDelete;
+        this.condition = condition;
     }
 
     @Override
     public void execute() throws CoSQLQueryExecutionError {
-        DatabaseCore.delete(tableName, contentsMustBeDelete);
+        DatabaseCore.delete(tableName, condition);
     }
 }

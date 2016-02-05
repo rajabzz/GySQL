@@ -8,24 +8,24 @@ import java.util.List;
 public class GroupByData {
 
     List<String> columns;
-    HavingCondition having;
+    String rawHavingCondition;
 
-    public GroupByData(List<String> columns, HavingCondition having) {
+    public GroupByData(List<String> columns, String having) {
         this.columns = columns;
-        this.having = having;
+        this.rawHavingCondition = having;
     }
 
     public List<String> getColumns() {
         return columns;
     }
 
-    public HavingCondition getHaving() {
-        return having;
+    public String getRawHavingCondition() {
+        return rawHavingCondition;
     }
 
     public enum Method {
 
-        MIM("MIN"), MAX("MAX"), SUM("SUM"), AVG("AVG");
+        MIN("MIN"), MAX("MAX"), SUM("SUM"), AVG("AVG");
 
         private String text;
 

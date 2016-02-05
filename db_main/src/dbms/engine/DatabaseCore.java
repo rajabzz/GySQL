@@ -1,14 +1,10 @@
+
 package dbms.engine;
 
 import dbms.exceptions.CoSQLError;
 import dbms.exceptions.CoSQLQueryExecutionError;
 import dbms.exceptions.CoSQLQueryParseError;
-import dbms.parser.GroupByData;
-import dbms.parser.LexicalToken;
-import dbms.parser.QueryParser;
-import dbms.parser.SelectValue;
-import dbms.parser.TupleCondition;
-import dbms.parser.ValueComputer;
+import dbms.parser.*;
 import dbms.util.GroupHashMap;
 
 import java.util.*;
@@ -67,8 +63,104 @@ public class DatabaseCore {
         System.out.println("DATABASE CREATED");
     }
 
-    // TODO @Urgent null support
+    public static void createView(String name, ArrayList<String> tableNames, ArrayList<SelectValue> selectValues,
+                                  String rawTupleCondition, int type, GroupByData groupBy) throws CoSQLError {
+
+        // check if name is not unique
+        for (Table table : currentDatabase.tables.values()) {
+            if (table.tableName.equals(name)) {
+                String error = String.format("Database \'%s\' already contains a table by the name: \'%s\'",
+                        currentDatabase.name,
+                        name
+                );
+                throw new CoSQLQueryExecutionError(error);
+            }
+        }
+
+        //making the view and adding to database
+
+        Table tlb = select(tableNames, selectValues, rawTupleCondition, type, groupBy);
+        View view = new View(tlb.getName(), tlb.getColumns(), tlb.getContents());
+        view.setTableName(name);
+        currentDatabase.addTable(view);
+
+        Table t = null;
+        /** searching for PK **/
+        for (String Tname : tableNames) {
+            t = currentDatabase.getTable(Tname);
+            view.originalTables.add(t);
+            for (Column c : view.getColumns()) {
+                if (c.getName().equals(t.getPKcolumn().getName()))
+                    view.setPKcolumn(c.getName());
+            }
+        }
+
+        //if there is no Pk then its not pazira
+        if (view.PKcolumns.isEmpty() || view.originalTables.size() > 1 || groupBy != null)
+            view.isPazira = false;
+
+
+        String message = "VIEW CREATED";
+        System.out.println(message);
+    }
+
     public static void insert(String tableName, List<LexicalToken> values) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        if (table instanceof View) {
+            View v = (View) table;
+            insertItemsForView(v, values, false);
+        } else
+            insertItems(table.getName(), values, false);
+
+    }
+
+
+    public static boolean insertItemsForView(View view, List<LexicalToken> values, boolean viewIsReference) throws CoSQLQueryExecutionError {
+        if (!view.isPazira) {
+            System.out.println(String.format("VIEW %s IS NOT UPDATABLE", view.getName()));
+            return false;
+        }
+
+        //insert khodesh va reference hash
+
+        boolean error = false;
+
+        for (Table tbl : view.originalTables) {
+            HashMap<Integer, LexicalToken> colValue = new HashMap<>();
+
+            for (int i = 0; i < view.getColumnCount(); i++) {
+                colValue.put(tbl.getColumnIndex(view.getColumnAt(i)), values.get(i));
+            }
+
+            List<LexicalToken> valuesMustBeInserted = new ArrayList<>();
+            for (int i = 0; i < tbl.getColumnCount(); i++) {
+                if (colValue.containsKey(i)) {
+                    valuesMustBeInserted.add(colValue.get(i));
+                } else {
+                    valuesMustBeInserted.add(new LexicalToken("NULL", false));
+                }
+            }
+            if (tbl instanceof View) {
+                View v = (View) tbl;
+                error = !insertItemsForView(v, valuesMustBeInserted, true);
+            }
+            else
+                error = !insertItems(tbl.getName(), valuesMustBeInserted, true);
+        }
+
+        if (!error)
+            return insertItems(view.getName(), values, viewIsReference);
+
+        return false;
+    }
+
+    // TODO @Urgent null support
+    public static boolean insertItems(String tableName, List<LexicalToken> values, boolean isReferenceTable) throws CoSQLQueryExecutionError {
 
         Table target = currentDatabase.getTable(tableName);
 
@@ -76,6 +168,7 @@ public class DatabaseCore {
         if (target == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
+
 
         // check argument count
         if (values.size() != target.getColumnCount()) {
@@ -88,7 +181,8 @@ public class DatabaseCore {
             if (target.getColumnAt(i).type == Table.ColumnType.INT) {
 
                 // expecting numeral value
-                if (!values.get(i).getValue().matches(QueryParser.REGEX_NUMERAL)) {
+                if (!values.get(i).getValue().matches(QueryParser.REGEX_NUMERAL)
+                        && !values.get(i).getValue().equalsIgnoreCase("null")) {
                     throwExecError("Insert argument at index %d should be numeral (%s given)",
                             i, values.get(i).getValue()
                     );
@@ -104,10 +198,8 @@ public class DatabaseCore {
                 }
 
             } else {
-
                 // avoiding later stupid bugs
                 throw new IllegalStateException();
-
             }
         }
 
@@ -118,10 +210,14 @@ public class DatabaseCore {
         for (int i = 0; i < target.getColumnCount(); i++) {
 
             if (target.getColumnAt(i).type == Table.ColumnType.INT) { // if int
-
                 // parse as number
-                long parsed = Long.parseLong(values.get(i).getValue());
-                dataValueSet.add(parsed);
+                String v = values.get(i).getValue();
+                if (!v.equalsIgnoreCase("null")) {
+                    long parsed = Long.parseLong(v);
+                    dataValueSet.add(parsed);
+                } else {
+                    dataValueSet.add("NULL"); // TODO :s
+                }
 
             } else if (target.getColumnAt(i).type == Table.ColumnType.VARCHAR) { // if varchar
 
@@ -130,7 +226,7 @@ public class DatabaseCore {
                 if (tk.getValue().equalsIgnoreCase("null") && !tk.isLiteral()) {
                     // add directly
 
-                    dataValueSet.add(null);
+                    dataValueSet.add("NULL");
                 } else {
                     dataValueSet.add(values.get(i).getValue());
                 }
@@ -146,7 +242,9 @@ public class DatabaseCore {
         if (pkIndex != -1) {
             for (Table.Row prev : target.getContents()) {
                 if (prev.getValueAt(pkIndex).equals(dataValueSet.get(pkIndex)) || dataValueSet.get(pkIndex).equals(null)) {
-                    System.out.println("C1 CONSTRAINT FAILED");
+                    if (!isReferenceTable) {
+                        System.out.println("C1 CONSTRAINT FAILED");
+                    }
                     isPKError = true;
                     break;
                 }
@@ -168,41 +266,26 @@ public class DatabaseCore {
             Object value = dataValueSet.get(fkIndex);
             if (!reference.exists(value, pkIndexRef)) {
                 interrupt = true;
-                System.out.println("C2 CONSTRAINT FAILED");
+                if (!isReferenceTable) {
+                    System.out.println("C2 CONSTRAINT FAILED");
+                }
                 break;
             }
-//            for (Table.Row prev : reference.contents) {
-//                System.out.println("data is : " + dataValueSet.get(fkIndex));
-//                System.out.println("prev is : " + prev.getValueAt(pkIndexRef));
-//                if (prev.getValueAt(pkIndexRef).equals(dataValueSet.get(fkIndex))) {
-//                    break;
-//                    interrupt = true;
-//                    System.out.println("i is : " + interrupt);
-//                }
-//            }
-
-
         }
 
-        if (interrupt == false && isPKError == false) {
+        if (!interrupt && !isPKError) {
             // finally, insert the parsed
             target.insertRow(dataValueSet);
-            System.out.println("RECORD INSERTED");
+            if (!isReferenceTable) {
+                System.out.println("RECORD INSERTED");
+            }
+            return true;
         }
-//        } else {
-//            target.insertRow(dataValueSet);
-//
-//            interrupt = false;
-//            System.out.println("RECORD INSERTED");
-//        }
 
-        //  System.out.println(target);
+        return false;
     }
 
     public static void createTable(String name, List<Table.Column> columns, String PK, ArrayList<String[]> FKDetails) throws CoSQLQueryExecutionError, CoSQLError {
-
-
-        // TODO check names legal
 
         // check if name is not unique
         for (Table table : currentDatabase.tables.values()) {
@@ -218,8 +301,6 @@ public class DatabaseCore {
         // instantiate
         Table newTable = new Table(name);
         Table target; //reference table
-//        ArrayList<Table.Column> Fkcolumn = newTable.FKcolumns;
-//        ArrayList<Table> fkTableReference = newTable.tableReference;
 
         // create columns
         for (Table.Column c : columns) {
@@ -252,7 +333,7 @@ public class DatabaseCore {
         currentDatabase.addTable(newTable);
         if (newTable.getPKcolumn() != null)
             initialCreateIndex("PKIndex", newTable, newTable.getPKcolumn());
-        for (Table.Column fkCol: newTable.FKcolumns)
+        for (Table.Column fkCol : newTable.FKcolumns)
             initialCreateIndex("FKIndex: " + fkCol.getName(), newTable, fkCol);
 
         // user feedback
@@ -262,10 +343,10 @@ public class DatabaseCore {
 
     private static void initialCreateIndex(String indexName, Table table, Table.Column column) {
 
-        // instantiate new index and add to table
+//         instantiate new index and add to table
+        table.initIndex();
         Table.Index index = new Table.Index(indexName, column);
         table.addIndex(index);
-
     }
 
     public static void createIndex(String indexName, String tableName, String columnName) throws CoSQLQueryExecutionError {
@@ -317,29 +398,104 @@ public class DatabaseCore {
 
     }
 
-    public static void update(String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents) throws CoSQLError {
+    public static void update(String tableName, String colName, String rawComputeValue, String condition) throws CoSQLError {
         Table table = currentDatabase.getTable(tableName);
 
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        /*ArrayList<Integer> contentIndexes = new ArrayList<>();
-        int colIndex = table.getColumnIndex(colName);
-        for (Table.Row row: contents) {
-            contentIndexes.add(table.getRowIndex(row));
-        }*/
+        if (table instanceof View) {
+            View v = (View) table;
+            updateItemsForView(v.getName(), colName, rawComputeValue, condition, false);
+        } else {
+            updateItems(table.getName(), colName, rawComputeValue,
+                    new TupleCondition(condition, table.getName()).getContents(), false);
+        }
+    }
+
+
+    public static boolean updateItemsForView(String viewName, String colName, String rawComputeValue
+            , String condition, boolean isReferenceTable) throws CoSQLError {
+        View view = (View) currentDatabase.getTable(viewName);
+
+        if (view == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", viewName, currentDatabase);
+        }
+
+        if (!view.isPazira) {
+            System.out.println(String.format("VIEW %s IS NOT UPDATABLE", viewName));
+            return false;
+        }
+
+        boolean referenceErr = false;
+
+        for (Table t : view.originalTables) {
+            for (Column col : view.getColumns()) {
+                if (col.name.equals(colName)) {
+                    if (t instanceof View)
+                        referenceErr = !updateItemsForView(t.getName(), colName, rawComputeValue, condition, true);
+                    else
+                        referenceErr = !updateItems(t.getName(), colName, rawComputeValue,
+                                new TupleCondition(condition, t.getName()).getContents(), true);
+                }
+            }
+        }
+
+        if (referenceErr)
+            return false;
+
+
+        //checking if the wanted column is Fk and get its table reference
+
+        ArrayList<Row> contents = new TupleCondition(condition, viewName).getContents();
+
+        int colIndex = view.getColumnIndex(colName);
+
+        ValueComputer.ParsedTuple tuple = ValueComputer.computeFieldBased(rawComputeValue, view);
+
+        boolean error = false;
+
+        for (Table.Row row : contents) {
+            //LexicalToken computeValue = ComputeValue.compute(rawComputeValue, table, index);
+
+            Object computeValue = tuple.computeForRow(row);
+            if (colIndex == view.getColumnIndex(view.getPKcolumn())) {
+                for (Table.Row r : view.getContents()) {
+                    if (computeValue.equals(r.getValueAt(colIndex))) {
+                        if (isReferenceTable)
+                            System.out.println("C1 CONSTRAINT FAILED");
+                        error = true;
+                        break;
+                    }
+                }
+            }
+            if (!error)
+                row.updateValueAt(colIndex, computeValue);
+            else return false;
+        }
+
+        return true;
+    }
+
+
+    public static boolean updateItems(String tableName, String colName, String rawComputeValue, ArrayList<Table.Row> contents
+            , boolean isReferenceTable) throws CoSQLError {
+
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
 
         //checking if the wanted column is Fk and get its table reference
         boolean isFK = false;
-        Table.Column FKwanted;
         Table refTable = null;
         int pkColIndex = -1;
         int i = -1;
         for (Table.Column c : table.FKcolumns) {
             i++;
             if (c.getName().equals(colName)) {
-                FKwanted = c;
                 isFK = true;
                 refTable = table.tableReference.get(i);
                 pkColIndex = refTable.getColumnIndex(refTable.getPKcolumn());
@@ -359,7 +515,8 @@ public class DatabaseCore {
             if (colIndex == table.getColumnIndex(table.getPKcolumn())) {
                 for (Table.Row r : table.getContents()) {
                     if (computeValue.equals(r.getValueAt(colIndex))) {
-                        System.out.println("C1 CONSTRAINT FAILED");
+                        if (!isReferenceTable)
+                            System.out.println("C1 CONSTRAINT FAILED");
                         error = true;
                         break;
 
@@ -377,31 +534,33 @@ public class DatabaseCore {
                         if (table.equals(l.tableReference.get(z))) {
                             cool = l.getColumnIndex(l.FKcolumns.get(z));
 
-//                            for (int k = 0; k < l.tableReference.size(); k++) {
-//                                if (table.equals(l.tableReference.get(k))) {
                             if (l.onUpdate.get(z).equalsIgnoreCase("restrict") && l.exists(obj, cool)) {
                                 error = true;
-                                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
+                                if (!isReferenceTable)
+                                    System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
                                 break;
                             }
-//                                }
-//                                if (error == true)
-//                                    break;
-//                            }
                         }
                     }
                     if (error) {
                         continue;
                     }
+
+                    int rowIndex = table.getRowIndex(row);
+                    Object val = row.getValueAt(colIndex);
                     row.updateValueAt(colIndex, computeValue); //pk updates
+                    table.updateIndexAt(colIndex, rowIndex, val);
                     // fk updates
                     for (Table target : table.listener) {
                         for (int j = 0; j < target.FKcolumns.size(); j++) {
                             if (target.tableReference.get(j).equals(table)) {
                                 col = target.getColumnIndex(target.FKcolumns.get(j));
                                 for (Table.Row r2 : target.getContents()) {
-                                    if (r2.getValueAt(col).equals(obj))
+                                    if (r2.getValueAt(col).equals(obj)) {
+                                        val = r2.getValueAt(col);
                                         r2.updateValueAt(col, computeValue);
+                                        target.updateIndexAt(col, target.getRowIndex(r2), val);
+                                    }
                                 }
                             }
                         }
@@ -410,83 +569,25 @@ public class DatabaseCore {
             } else if (isFK) {
 
                 if (!refTable.exists(computeValue, pkColIndex)) {
-                    System.out.println("C2 CONSTRAINT FAILED");
-                    continue;
-                } else
+                    if (!isReferenceTable)
+                        System.out.println("C2 CONSTRAINT FAILED");
+//                    error = true; TODO ino bayad error begirim ya na ?
+                } else {
+                    int rowIndex = table.getRowIndex(row);
+                    Object val = row.getValueAt(colIndex);
                     row.updateValueAt(colIndex, computeValue);
-            } else
-                row.updateValueAt(colIndex, computeValue);
-
-
-            /*if (computeValue.isLiteral()) {
-                table.getRowAt(index).updateValueAt(colIndex, computeValue.getValue());
-                table.updateIndexAt(colIndex, index);
+                    table.updateIndexAt(colIndex, rowIndex, val);
+                }
             } else {
-                table.getRowAt(index).updateValueAt(colIndex, Long.parseLong(computeValue.getValue()));
-                table.updateIndexAt(colIndex, index);
-            }*/
-
-
+                int rowIndex = table.getRowIndex(row);
+                Object val = row.getValueAt(colIndex);
+                row.updateValueAt(colIndex, computeValue);
+                table.updateIndexAt(colIndex, rowIndex, val);
+            }
         }
 
-        //  System.out.println(table);
+        return !error;
     }
-
-
-//    public static void delete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) throws CoSQLQueryExecutionError {
-//        Table table = currentDatabase.getTable(tableName);
-//
-//        if (table == null) {
-//            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
-//        }
-//
-//        // Object obj = null;
-//        for (Table.Row row : new ArrayList<Table.Row>(contentsMustBeDelete)) {
-//
-//            //if pk doesn't have references then delete it
-//            if (table.listener.isEmpty()) {
-//                table.removeRow(row);
-//                table.updateIndexForDelete(row);
-//            } else {
-//
-////                for (Table.Row r : table.getContents()){
-////                    if(row.)
-////                     obj = r.getValueAt(table.getColumnIndex(table.getPKcolumn()));
-////                }
-//
-//                Object obj = row.getValueAt(table.getColumnIndex(table.getPKcolumn()));
-//                int cool = -1;
-//                for (Table l : table.listener) {
-//
-//                    for (int i = 0; i < l.tableReference.size(); i++) {
-//                        if (table.equals(l.tableReference.get(i))) {
-//                            cool = l.getColumnIndex(l.FKcolumns.get(i));
-//                        }
-//                        if (cool != -1) {
-//                            for (int k = 0; k < l.tableReference.size(); k++) {
-//                                if (table.equals(l.tableReference.get(k))) {
-//                                    if (l.onDelete.get(k).equalsIgnoreCase("restrict") && l.exists(obj, cool)) {
-//                                        //referenced FK was restrict and the record existed
-//                                        System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
-//                                        break;
-//                                    } else if (l.onDelete.get(k).equalsIgnoreCase("cascade") && l.exists(obj, cool)) {
-//
-//                                        delete(l.getName(), contentsMustBeDelete);
-//
-//                                    } else if (l.onDelete.get(k).equalsIgnoreCase("restrict") && !l.exists(obj, cool)) {
-//                                        //referenced FK was restrict but the record didn't exist
-//                                        table.removeRow(row);
-//                                        table.updateIndexForDelete(row);
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        //    System.out.println(table);
-//        }
-//    }
 
     static class TR {
         Table table;
@@ -523,39 +624,6 @@ public class DatabaseCore {
         }
         deletedNodes.add(new TR(t, r));
 
-//        if (t.listener.isEmpty()) {
-//            deletedNodes.add(new TR(t, r));
-//        } else {
-//
-//            Object obj = r.getValueAt(t.getColumnIndex(t.getPKcolumn()));
-//            rest = false;
-//            for (Table l : t.listener) {
-//                int i;
-//                for (i = 0; i < l.tableReference.size(); i++) {
-//                    if (l.tableReference.get(i).equals(t)) {
-//                        break;
-//                    }
-//                }
-//
-//                int relatedFKIndex = l.getColumnIndex(l.FKcolumns.get(i));
-//                boolean relatedRestrict = (l.onDelete.get(i).equals("restrict")) ? true : false;
-//
-//                for (Table.Row row : l.getContents()) {
-//                    if (row.getValueAt(relatedFKIndex).equals(obj)) {
-//                        if (relatedRestrict) {
-//                            rest = true;
-//                            System.out.println(rest+l.getName());
-//                            return;
-//                        } else {
-//                            deleteARow(row, l);
-//                        }
-//                    }
-//
-//                }
-//            }
-//            if (!rest)
-//                deletedNodes.add(new TR(t, r));
-//        }
     }
 
     private static boolean restrictDFS(Table.Row r, Table t) {
@@ -589,38 +657,75 @@ public class DatabaseCore {
         }
     }
 
-    public static void delete(String tableName, ArrayList<Table.Row> contentsMustBeDelete) throws CoSQLQueryExecutionError {
+
+    public static void delete(String tableName, String condition) throws CoSQLQueryExecutionError {
         Table table = currentDatabase.getTable(tableName);
 
         if (table == null) {
             throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
         }
 
-        for (Table.Row row : new ArrayList<Table.Row>(contentsMustBeDelete)) {
-            if (!restrictDFS(row, table)) {
-                deleteARow(row, table);
-                for (TR d : deletedNodes) {
-                    d.table.removeRow(d.row);
-                    d.table.updateIndexForDelete(d.row);
-                }
-                deletedNodes.clear();
-            } else {
-                System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
-                break;
-            }
+        if (table instanceof View) {
+            View v = (View) table;
+            deleteItemsForView(v, condition, false);
+        } else {
+            deleteItems(table.getName(), new TupleCondition(condition, table.getName()).getContents(), false);
         }
     }
 
-//    @Deprecated
-//    public static Table select(String tableName, ArrayList<String> colNames, String rawTupleCondition) throws CoSQLError {
-//        // checking if table exists
-//        Table table = currentDatabase.getTable(tableName);
-//        if (table == null) {
-//            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
-//        }
-//
-//        return select(table, colNames, rawTupleCondition);
-//    }
+
+    public static boolean deleteItemsForView(View view, String condition, boolean isReferenceTable) throws CoSQLQueryExecutionError {
+        if (!view.isPazira) {
+            System.out.println(String.format("VIEW %s IS NOT UPDATABLE", view.getName()));
+            return false;
+        }
+
+        //delete khodesh va refrence hash
+
+        boolean error = false;
+        for (Table t : view.originalTables) {
+            if (t instanceof View) {
+                View v = (View) t;
+                error = !deleteItemsForView(v, condition, true);
+            } else
+                error = !deleteItems(t.getName(), new TupleCondition(condition, t.getName()).getContents(), true);
+        }
+
+        if (!error) {
+            deleteItems(view.getName(), new TupleCondition(condition, view.getName()).getContents(), false);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static boolean deleteItems(String tableName, ArrayList<Table.Row> contentsMustBeDelete, boolean isReferenceTable) throws CoSQLQueryExecutionError {
+        Table table = currentDatabase.getTable(tableName);
+
+        if (table == null) {
+            throwExecError("No table with name \'%s\' in database \'%s\'.", tableName, currentDatabase);
+        }
+
+        for (Table.Row row : new ArrayList<>(contentsMustBeDelete)) {
+            if (!restrictDFS(row, table)) {
+                deleteARow(row, table);
+                for (TR d : deletedNodes) {
+                    if (table.indexes != null) {
+                        d.table.updateIndexForDelete(d.row);
+                    }
+                    d.table.removeRow(d.row);
+                }
+                deletedNodes.clear();
+            } else {
+                if (!isReferenceTable)
+                    System.out.println("FOREIGN KEY CONSTRAINT RESTRICTS");
+                return false; // TODO
+            }
+        }
+
+        return true;
+    }
+
 
     private static class GeneralSelectResult {
 
@@ -636,33 +741,33 @@ public class DatabaseCore {
 
     }
 
-    public static GeneralSelectResult select(Table table, ArrayList<SelectValue> selectValues, String rawTupleCondition) throws CoSQLError {
+    public static GeneralSelectResult select(Table view, ArrayList<SelectValue> selectValues, String rawTupleCondition) throws CoSQLError {
 
         // get contents of tuple condition
         Map<Row, Row> sigmaMap = new HashMap<>();
-        TupleCondition tupleCondition = new TupleCondition(rawTupleCondition, table.tableName);
+        TupleCondition tupleCondition = new TupleCondition(rawTupleCondition, view.tableName);
         List<Table.Row> contents = tupleCondition.getContents();
 
         ArrayList<Integer> colIndexes = new ArrayList<>();
         ArrayList<Table.Column> columns = new ArrayList<>();
 
         // create header for new table (the table to be returned)
-        for (SelectValue sv: selectValues) {
+        for (SelectValue sv : selectValues) {
 
             if (sv.getType() == SelectValue.Type.COLUMN_NAME) {
 
                 String colName = sv.getTargetColumn();
-                colIndexes.add(table.getColumnIndex(colName));
-                columns.add(table.getColumn(colName));
+                colIndexes.add(view.getColumnIndex(colName));
+                columns.add(view.getColumn(colName));
 
             } else {
 
                 // check column name and type OK
-                Column target = table.getColumn(sv.getTargetColumn());
+                Column target = view.getColumn(sv.getTargetColumn());
                 if (target.getType() != Table.ColumnType.INT)
                     throw new CoSQLError("Aggregation function " + sv.getAggregateMethod().getText() + " only allowed for INT columns.");
 
-                String colName = sv.getAggregateMethod().getText() + "~"  + sv.getTargetColumn();
+                String colName = sv.getAggregateMethod().getText() + "~" + sv.getTargetColumn();
                 colIndexes.add(-1);
                 columns.add(new Column(colName, Table.ColumnType.INT));
             }
@@ -675,7 +780,7 @@ public class DatabaseCore {
                 if (i != -1)
                     values.add(row.getValueAt(i));
                 else
-                    values.add(null);
+                    values.add("NULL"); //TODO :s
             }
             Row sigmaFiltered = new Table.Row(values);
             finalContents.add(sigmaFiltered);
@@ -698,12 +803,12 @@ public class DatabaseCore {
             // select both rows and columns
             GeneralSelectResult selected = select(table1, selectValues, rawTupleCondition);
 
-            // affect group by statement
-            if (groupBy != null)
-                return groupTable(selected.finalResult, groupBy, table1, selected.sigmaMap);
-            else
+
+            if (groupBy == null)
                 return selected.finalResult;
 
+
+            return  groupTable(selected.finalResult, groupBy, table1, selected.sigmaMap);
         }
 
         Table table2 = currentDatabase.getTable(tableNames.get(1));
@@ -723,7 +828,7 @@ public class DatabaseCore {
 
         // check selected columns are in group by, if it's a group query
         if (groupBy != null)
-            for (SelectValue sv: selectValues) {
+            for (SelectValue sv : selectValues) {
                 if (sv.getType() == SelectValue.Type.COLUMN_NAME) {
                     if (!groupBy.getColumns().contains(sv.getTargetColumn())) {
                         throw new CoSQLError("Only aggregate functions and group columns allowed.");
@@ -731,19 +836,22 @@ public class DatabaseCore {
                 }
             }
 
-        return select(resultTable, selectValues, rawTupleCondition).finalResult; // TODO TOFF :: bara zarb carthesian kaar nemikone :| think of something
+        GeneralSelectResult selectResult = select(resultTable, selectValues, rawTupleCondition); // TODO TOFF :: bara zarb carthesian kaar nemikone :| think of something
+
+        if (groupBy == null)
+            return selectResult.finalResult;
+
+        return groupTable(selectResult.finalResult, groupBy, resultTable, selectResult.sigmaMap);
 
     }
 
     public static Table groupTable(Table selectTable, GroupByData groupBy, Table sourceTable, Map<Row, Row> sigmaMap) throws CoSQLQueryExecutionError {
 
         // resolve columns
-        List<Table.Column> groupColumns = new ArrayList<>();
         List<Integer> groupColumnsPositions = new ArrayList<>();
-        for (String colName: groupBy.getColumns()) {
+        for (String colName : groupBy.getColumns()) {
             try {
                 Column col = selectTable.getColumn(colName);
-                groupColumns.add(col);
                 groupColumnsPositions.add(selectTable.getColumnIndex(col));
             } catch (CoSQLError coSQLError) {
                 coSQLError.printStackTrace();
@@ -751,12 +859,13 @@ public class DatabaseCore {
             }
         }
 
-        Table res = new Table("GROUP_RESULT", selectTable.columns, new ArrayList<Row>());
 
         GroupHashMap<List<Object>, Row> map = new GroupHashMap<>();
 
+        ArrayList<Row> contents = new ArrayList<>();
+
         // iterate table rows
-        for (Row row: selectTable.getRows()) {
+        for (Row row : selectTable.getRows()) {
 
             // make a tuple of group columns' values
             List<Object> valuesTuple = new ArrayList<>();
@@ -770,14 +879,14 @@ public class DatabaseCore {
 
         }
 
-        for (List<Object> groupUniqueVal: map.keySet()) {
+        for (List<Object> groupUniqueVal : map.keySet()) {
 
             Row firstRow = map.get(groupUniqueVal).get(0);
             int colsCount = selectTable.getColumns().size();
 
-            List<Object> valuesTuple = new ArrayList<>(selectTable.getColumns().size());
+            ArrayList<Object> valuesTuple = new ArrayList<>(selectTable.getColumns().size());
 
-            for (int i=0; i<colsCount; i++) {
+            for (int i = 0; i < colsCount; i++) {
 
                 Column column = selectTable.getColumnAt(i);
 
@@ -787,7 +896,7 @@ public class DatabaseCore {
                     Method method = Method.fromText(explode[0]);
 
                     if (method == null) {
-                        throw new CoSQLQueryExecutionError("No such aggregation function: " + method);
+                        throw new CoSQLQueryExecutionError("No such aggregation function: " + column);
                     }
 
                     int targetIndex;
@@ -807,14 +916,14 @@ public class DatabaseCore {
                             long sum = 0;
                             int count = 0;
 
-                            for (Row row: map.get(groupUniqueVal)) {
+                            for (Row row : map.get(groupUniqueVal)) {
                                 Row corresponding = sigmaMap.get(row);
                                 long value = (long) corresponding.getValueAt(targetIndex);
                                 sum += value;
                                 count += 1;
                             }
 
-                            columnValue = sum / (double)count;
+                            columnValue = sum / (double) count;
                             break;
                         }
 
@@ -822,7 +931,7 @@ public class DatabaseCore {
 
                             long sum = 0;
 
-                            for (Row row: map.get(groupUniqueVal)) {
+                            for (Row row : map.get(groupUniqueVal)) {
                                 Row corresponding = sigmaMap.get(row);
                                 long value = (long) corresponding.getValueAt(targetIndex);
                                 sum += value;
@@ -836,7 +945,7 @@ public class DatabaseCore {
 
                             long max = Long.MIN_VALUE;
 
-                            for (Row row: map.get(groupUniqueVal)) {
+                            for (Row row : map.get(groupUniqueVal)) {
                                 Row corresponding = sigmaMap.get(row);
                                 long value = (long) corresponding.getValueAt(targetIndex);
                                 max = Math.max(value, max);
@@ -846,11 +955,11 @@ public class DatabaseCore {
                             break;
                         }
 
-                        case MIM: {
+                        case MIN: {
 
                             long min = Long.MAX_VALUE;
 
-                            for (Row row: map.get(groupUniqueVal)) {
+                            for (Row row : map.get(groupUniqueVal)) {
                                 Row corresponding = sigmaMap.get(row);
                                 long value = (long) corresponding.getValueAt(targetIndex);
                                 min = Math.min(value, min);
@@ -872,10 +981,24 @@ public class DatabaseCore {
 
             }
 
+            Row row = new Row(valuesTuple);
+            contents.add(row);
         }
 
-        return res;
+        Table groupedTable = new Table("GROUP_RESULT", selectTable.columns, contents);
+
+        if (groupBy.getRawHavingCondition() == null)
+            return groupedTable;
+
+        Table finalTable = new Table("final", selectTable.columns,
+                new HavingCondition(groupBy.getRawHavingCondition(), selectTable, sourceTable, sigmaMap
+                , map).getContents());
+
+//        return new Table("GROUP_RESULT", selectTable.columns, contents);
+        return finalTable;
     }
+
+
 
     private static boolean objectEquals(Object o1, Object o2) {
 
@@ -917,9 +1040,11 @@ public class DatabaseCore {
         Table.ColumnType colType = table.getColumnAt(colIndex).type;
         Table.Column column = table.getColumnAt(colIndex);
 
+        Table.Index idx = null;
         // fetch index if any
-        Table.Index idx = table.indexes.get(column);
-
+        if (table.indexes != null) {
+            idx = table.indexes.get(column);
+        }
         // parse query for its type
         ValueComputer.ValueType valueType = ValueComputer.getType(computeValueQuery);
 

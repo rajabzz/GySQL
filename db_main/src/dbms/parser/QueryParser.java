@@ -19,6 +19,7 @@ public class QueryParser {
 
     public static final String REGEX_COLUMN_NAME = "^[a-zA-Z_.\\$][a-zA-Z0-9_.\\$]*$"; //TODO CHECK GOOSALE
     public static final String REGEX_TABLE_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
+    public static final String REGEX_VIEW_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
     public static final String REGEX_DATABASE_NAME = "^[a-zA-Z\\$][a-zA-Z_\\$0-9]*$";
     public static final String REGEX_NUMERAL = "^[\\+\\-]?[0-9]+$";
     public static final String REGEX_INDEX_NAME = "^[a-zA-Z_\\$][a-zA-Z0-9_\\$]*$";
@@ -58,7 +59,7 @@ public class QueryParser {
                 create(parseData);
             } else if (next.equalsIgnoreCase("insert")) {
                 insert(parseData);
-            } else if (next.equalsIgnoreCase("update")){
+            } else if (next.equalsIgnoreCase("update")) {
                 update(parseData);
             } else if (next.equalsIgnoreCase("select")) {
                 select(parseData);
@@ -193,31 +194,12 @@ public class QueryParser {
         }
         parseData.goPrev();
 
-        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
-        CoSQLUpdate updateQuery = new CoSQLUpdate(tableName, columnName, computeValueStr, tupleCondition.getContents());
+//        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
+        CoSQLUpdate updateQuery = new CoSQLUpdate(tableName, columnName, computeValueStr, condition);
         parseData.addCommand(updateQuery);
     }
 
     private SelectValue selectValue() throws CoSQLQueryParseError {
-
-        // check if we're facing an aggregation function
-        String lookAhead = parseData.peek().value;
-        if (GroupByData.Method.isAggregateFunction(lookAhead)) {
-
-            // parse aggregate method type
-            String methodText = parseData.next();
-            GroupByData.Method method = GroupByData.Method.fromText(methodText);
-
-            match("(");
-
-            // get column name
-            String column = columnName(parseData);
-
-            match(")");
-
-            return SelectValue.fromAggregateFunction(method, column);
-
-        }
 
         // if not, parse a normal column name
         return SelectValue.fromIndividualColumn(columnName(parseData));
@@ -225,6 +207,34 @@ public class QueryParser {
     }
 
     private void select(ParseData parseData) throws CoSQLQueryParseError {
+
+        GroupByData groupByData;
+        ArrayList<String> tableNames;
+        ArrayList<SelectValue> selectValues;
+        String condition;
+        int selectType;
+
+        List parseArray = new ArrayList();
+        parseArray = selectParser(parseData);
+        tableNames = (ArrayList<String>) parseArray.get(0);
+        selectValues = (ArrayList<SelectValue>) parseArray.get(1);
+        condition = (String) parseArray.get(2);
+        selectType = (Integer) parseArray.get(3);
+        groupByData = (GroupByData) parseArray.get(4);
+
+        CoSQLSelect selectQuery = new CoSQLSelect(
+                tableNames,
+                selectValues,
+                condition,
+                selectType,
+                groupByData
+        );
+
+        parseData.addCommand(selectQuery);
+
+    }
+
+    private List selectParser(ParseData parseData) throws CoSQLQueryParseError {
 
         ArrayList<String> tableNames = new ArrayList<>();
         ArrayList<SelectValue> selectValues = new ArrayList<>();
@@ -258,7 +268,7 @@ public class QueryParser {
 
         String condition = "";
         LexicalToken nextFullToken;
-        while (!((nextFullToken = parseData.nextFullToken()).getValue().equals(";"))) {
+        while (!((nextFullToken = parseData.nextFullToken()).getValue().equals(";")) && !nextFullToken.getValue().equalsIgnoreCase("group")) {
             if (nextFullToken.isLiteral()) {
                 condition = condition.concat("\"").concat(nextFullToken.getValue()).concat("\"");
             } else {
@@ -277,17 +287,17 @@ public class QueryParser {
             groupByData = groupBy();
         }
 
-        CoSQLSelect selectQuery = new CoSQLSelect(
-                tableNames,
-                selectValues,
-                condition,
-                selectType,
-                groupByData
-        );
 
-        parseData.addCommand(selectQuery);
+        List parseArray = new ArrayList();
+        parseArray.add(tableNames);
+        parseArray.add(selectValues);
+        parseArray.add(condition);
+        parseArray.add(selectType);
+        parseArray.add(groupByData);
 
+        return parseArray;
     }
+
 
     private GroupByData groupBy() throws CoSQLQueryParseError {
 
@@ -304,46 +314,29 @@ public class QueryParser {
             columnNames.add(columnName(parseData));
         }
 
-        HavingCondition having = null;
+        String rawCondition = null;
 
         if (parseData.peekAhead("having")) {
-            having = having();
+            rawCondition = having();
         }
 
-        return new GroupByData(columnNames, having);
+        return new GroupByData(columnNames, rawCondition);
 
     }
 
-    private HavingCondition having() throws CoSQLQueryParseError {
+    private String having() throws CoSQLQueryParseError {
 
         match("having");
 
-        // get and parse the aggregate method
-        String methodText = parseData.next();
-        GroupByData.Method method = GroupByData.Method.fromText(methodText);
-        if (method == null) {
-            throw new CoSQLQueryParseError("Unknown aggregation function: " + methodText);
+        String condition = "";
+        String token;
+        while (!(token = parseData.next()).equalsIgnoreCase(";")) {
+            condition = condition.concat(token);
         }
 
-        match("(");
+        parseData.goPrev();
 
-        // get column name
-        String column = columnName(parseData);
-
-        match(")");
-
-        // get and parse theta operator
-        String operatorText = parseData.next();
-        HavingCondition.ThetaOperator operator = HavingCondition.ThetaOperator.fromText(operatorText);
-        if (operator == null) {
-            throw new CoSQLQueryParseError("Unknown theta operation: " + operatorText);
-        }
-
-        // get and parse the comparative value
-        LexicalToken value = parseData.nextFullToken();
-
-        return new HavingCondition(method, column, operator, value);
-
+        return condition;
     }
 
     private void delete(ParseData parseData) throws CoSQLQueryParseError {
@@ -372,9 +365,9 @@ public class QueryParser {
         }
         parseData.goPrev();
 
-        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
+//        TupleCondition tupleCondition = new TupleCondition(condition, tableName);
 
-        CoSQLDelete deleteQuery = new CoSQLDelete(tableName, tupleCondition.getContents());
+        CoSQLDelete deleteQuery = new CoSQLDelete(tableName, condition);
         parseData.addCommand(deleteQuery);
     }
 
@@ -401,6 +394,21 @@ public class QueryParser {
         return tableName;
     }
 
+
+    private String viewName(ParseData parseData) throws CoSQLQueryParseError {
+
+        // get potential view name
+        String viewName = parseData.next();
+
+        // match regex
+        if (!viewName.matches(REGEX_VIEW_NAME)) {
+            String error = String.format("Illegal view name: '%s'", viewName);
+            throw new CoSQLQueryParseError(error);
+        }
+
+        return viewName;
+    }
+
     private String indexName(ParseData parseData) throws CoSQLQueryParseError {
 
         // get token
@@ -425,12 +433,15 @@ public class QueryParser {
             createTable(parseData);
         } else if (lookAhead.equalsIgnoreCase("index")) {
             createIndex(parseData);
+        } else if (lookAhead.equalsIgnoreCase("view")) {
+            createView(parseData);
         } else {
             String error = String.format("Unexpected \'%s\' after CREATE.", lookAhead);
             throw new CoSQLQueryParseError(error);
         }
 
     }
+
 
     private void createIndex(ParseData parseData) throws CoSQLQueryParseError {
 
@@ -467,6 +478,56 @@ public class QueryParser {
         parseData.addCommand(new CoSQLCreateDatabase(name));
     }
 
+    private void createView(ParseData parseData) throws CoSQLQueryParseError {
+
+        GroupByData groupByData = null;
+        ArrayList<String> tableNames = new ArrayList<>();
+        ArrayList<SelectValue> selectValues = new ArrayList<>();
+        String condition = "";
+        int selectType = 0;
+
+        String name = viewName(parseData);
+
+        // force 'AS'
+        match("AS");
+        match("select");
+
+        List parseArray = new ArrayList();
+        parseArray = selectParser(parseData);
+        tableNames = (ArrayList<String>) parseArray.get(0);
+        selectValues = (ArrayList<SelectValue>) parseArray.get(1);
+        condition = (String) parseArray.get(2);
+        selectType = (Integer) parseArray.get(3);
+        groupByData = (GroupByData) parseArray.get(4);
+
+        //print
+//        System.out.println(name);
+//        for (SelectValue s : selectValues) {
+//            System.out.println("value is : " + s.toString());
+//        }
+//        for (String s1 : tableNames) {
+//            System.out.println("name is : " + s1.toString());
+//        }
+//        System.out.println(condition);
+//        System.out.println(selectType);
+//        //  System.out.println(name);
+//        System.out.println(condition);
+
+        CoSQLCreateView command = new CoSQLCreateView(
+                name,
+                tableNames,
+                selectValues,
+                condition,
+                selectType,
+                groupByData
+        );
+
+        parseData.addCommand(command);
+
+
+    }
+
+
     private void createTable(ParseData parseData) throws CoSQLQueryParseError, CoSQLQueryExecutionError {
 
         String name = tableName(parseData);
@@ -494,7 +555,7 @@ public class QueryParser {
 
         String pkColumn, fkColumn, action1, action2, tableReference;
         ArrayList<String[]> FKarrays = new ArrayList<>();
-        int i = 0 , j =0;
+        int i = 0, j = 0;
         boolean isFK = true;
         String[] arr2 = new String[4];
         String lookAhead = parseData.next();
@@ -724,7 +785,7 @@ public class QueryParser {
         }
 
         void batchRun() throws CoSQLError {
-            for (CoSQLCommand command: commands) {
+            for (CoSQLCommand command : commands) {
                 command.execute(); // TODO batch run might get messed if something goes wrong in the middle, proper revert system needed
             }
         }
@@ -737,7 +798,7 @@ public class QueryParser {
         ArrayList<String> tokenize(String command) {
             String[] bySpace = command.split("\\s");
             ArrayList<String> res = new ArrayList<>();
-            for (String string: bySpace) {
+            for (String string : bySpace) {
                 StringTokenizer st = new StringTokenizer(string, "(),;", true);
             }
             return res;
